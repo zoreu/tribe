@@ -1,0 +1,17 @@
+{
+  "short_name": "Tribe",
+  "name": "Tribe Social Nostr",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#1877F2",
+  "display": "standalone",
+  "orientation": "portrait",
+  "description": "Rede Social Descentralizada e Anti-Censura no Nostr"
+}

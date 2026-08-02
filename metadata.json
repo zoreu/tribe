@@ -1,0 +1,6 @@
+{
+  "name": "Tribe",
+  "description": "Rede social descentralizada e sem censura no protocolo Nostr com feed, bate-papo criptografado, reels, grupos e PWA.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
