@@ -154,4 +154,13 @@ export const EXTRA_STRINGS: Record<string, Record<string, string>> = {
   keyCopied: { pt: 'Chave Copiada com Sucesso!', en: 'Key Copied Successfully!', es: '¡Clave Copiada con Éxito!', fr: 'Clé copiée avec succès !' },
   publicKeyCopied: { pt: 'Chave Pública Copiada!', en: 'Public Key Copied!', es: '¡Clave Pública Copiada!', fr: 'Clé publique copiée !' },
   enterNow: { pt: 'Entrar Agora no Tribe', en: 'Enter Now on Tribe', es: 'Entrar Ahora en Tribe', fr: 'Entrer maintenant sur Tribe' },
+  respondingTo: { pt: 'Respondendo a', en: 'Replying to', es: 'Respondiendo a', fr: 'En réponse à' },
+  cancelReply: { pt: 'Cancelar', en: 'Cancel', es: 'Cancelar', fr: 'Annuler' },
+  writeComment: { pt: 'Escreva um comentário...', en: 'Write a comment...', es: 'Escribe un comentario...', fr: 'Écrire un commentaire...' },
+  now: { pt: 'Agora', en: 'Now', es: 'Ahora', fr: 'Maintenant' },
+  respond: { pt: 'Responder', en: 'Reply', es: 'Responder', fr: 'Répondre' },
+  loadingReel: { pt: 'Carregando reel...', en: 'Loading reel...', es: 'Cargando reel...', fr: 'Chargement du reel...' },
+  noReelsYet: { pt: 'Nenhum Reel publicado ainda', en: 'No Reels published yet', es: 'Aún no hay Reels publicados', fr: 'Aucun Reel publié pour le moment' },
+  beFirstReel: { pt: 'Seja o primeiro a enviar um vídeo curto para o feed de Reels do Tribe!', en: 'Be the first to send a short video to the Tribe Reels feed!', es: 'Sé el primero en enviar un video corto al feed de Reels de Tribe!', fr: 'Soyez le premier à envoyer une courte vidéo au fil Reels de Tribe !' },
+  publishNewReel: { pt: 'Publicar Novo Reel', en: 'Publish New Reel', es: 'Publicar Nuevo Reel', fr: 'Publier un nouveau Reel' },
 };

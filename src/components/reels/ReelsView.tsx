@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   Film, 
   Heart, 
@@ -10,13 +11,16 @@ import {
   Volume2, 
   VolumeX, 
   Check, 
-  Play 
+  Play,
+  Loader2 
 } from 'lucide-react';
 import { CreatePostModal } from '../feed/CreatePostModal';
 import { linkifyText } from '../../lib/nostr/text';
 
 export const ReelsView: React.FC = () => {
   const { posts, likePost, repostPost, getShareableUrl, getProfile } = useNostr();
+  const { t } = useLanguage();
+  const [reelsLoaded, setReelsLoaded] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   // Apenas o reel com este id fica com som ativo; os demais permanecem mudos
@@ -50,6 +54,11 @@ export const ReelsView: React.FC = () => {
     const timer = setTimeout(() => setActiveReelId(focusedId), 2000);
     return () => clearTimeout(timer);
   }, [focusedId]);
+
+  useEffect(() => {
+    const tim = setTimeout(() => setReelsLoaded(true), 4000);
+    return () => clearTimeout(tim);
+  }, []);
 
   const toggleSound = (id: string) => {
     setUnmutedId(prev => (prev === id ? null : id));
@@ -134,19 +143,26 @@ export const ReelsView: React.FC = () => {
 
       {/* Feed de Reels */}
       {reelPosts.length === 0 ? (
+        !reelsLoaded ? (
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-12 text-center border border-slate-200 dark:border-slate-700">
+            <Loader2 className="w-8 h-8 animate-spin text-pink-400 mx-auto mb-3" />
+            <h3 className="font-bold text-slate-800 dark:text-slate-200">{t('loadingReel')}</h3>
+          </div>
+        ) : (
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-12 text-center border border-slate-200 dark:border-slate-700 space-y-3">
           <Film className="w-12 h-12 text-pink-400 mx-auto" />
-          <h3 className="font-bold text-slate-800 dark:text-slate-200">Nenhum Reel publicado ainda</h3>
+          <h3 className="font-bold text-slate-800 dark:text-slate-200">{t('noReelsYet')}</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Seja o primeiro a enviar um vídeo curto para o feed de Reels do Tribe!
+            {t('beFirstReel')}
           </p>
           <button
             onClick={() => setIsModalOpen(true)}
             className="py-2.5 px-5 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-xl text-xs shadow-md transition-all inline-block"
           >
-            Publicar Novo Reel
+            {t('publishNewReel')}
           </button>
         </div>
+        )
       ) : (
         <div className="space-y-6">
           {reelPosts.map(post => {

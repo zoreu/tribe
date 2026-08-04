@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNostr } from '../../context/NostrContext';
 import { 
   User, 
@@ -11,12 +11,52 @@ import {
   Image, 
   X, 
   Loader2, 
+  Play, 
   LogOut 
 } from 'lucide-react';
 import { PostCard } from '../feed/PostCard';
 import { uploadMediaToNostrBuild } from '../../lib/nostr/media';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
 import { useLanguage } from '../../context/LanguageContext';
+
+// Quadro de vídeo na grade de Mídias: usa preload="metadata" para mostrar o
+// primeiro quadro como prévia (em vez de quebrar) e um botão de play para tocar.
+const VideoMediaTile: React.FC<{ url: string }> = ({ url }) => {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const toggle = () => {
+    const v = ref.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(() => {});
+      setPlaying(true);
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full bg-black" onClick={toggle}>
+      <video
+        ref={ref}
+        src={url}
+        preload="metadata"
+        muted
+        playsInline
+        className="w-full h-full object-cover"
+      />
+      {!playing && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors cursor-pointer">
+          <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+            <Play className="w-6 h-6 text-slate-900 ml-0.5 fill-slate-900" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ProfileView: React.FC = () => {
   const { auth, updateProfile, posts, setShowAuthModal, logout, viewProfilePubkey, setViewProfilePubkey, getProfile, client } = useNostr();
@@ -252,7 +292,9 @@ export const ProfileView: React.FC = () => {
           {mediaPosts.map(post => (
             post.media.map((m, idx) => (
               <div key={post.id + idx} className="rounded-2xl overflow-hidden aspect-square bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                {m.type === 'file' ? (
+                {m.type === 'video' ? (
+                  <VideoMediaTile url={m.url} />
+                ) : m.type === 'file' ? (
                   <div className="w-full h-full p-2">
                     <FileAttachmentCard url={m.url} />
                   </div>

@@ -59,7 +59,7 @@ interface NostrContextType {
   createPost: (content: string, mediaUrls?: string[], groupId?: string, isReel?: boolean, isEncrypted?: boolean) => Promise<boolean>;
   likePost: (post: PostItem) => Promise<void>;
   repostPost: (post: PostItem) => Promise<void>;
-  commentPost: (postId: string, content: string, parentPubkey?: string) => Promise<boolean>;
+  commentPost: (rootId: string, content: string, parentPubkey?: string, parentId?: string) => Promise<boolean>;
   deletePost: (postId: string) => Promise<boolean>;
   loadNote: (id: string) => Promise<PostItem | null>;
 
@@ -708,6 +708,29 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   }, [profiles, auth.pubkey, auth.profile, client]);
 
+  // Helpers para comentários aninhados (NIP-10)
+  const getDirectParentId = (ev: NostrEvent): string | undefined => {
+    const eTags = ev.tags.filter(t => t[0] === 'e').map(t => t[1]);
+    return eTags.length ? eTags[eTags.length - 1] : undefined;
+  };
+  const getNestedReplies = (id: string, depth = 0): PostItem[] => {
+    if (depth > 30) return [];
+    return (interactionsRef.current.replies[id] || [])
+      .slice()
+      .sort((a, b) => a.created_at - b.created_at)
+      .map(r => {
+        // Recalcula curtidas/estado do comentário a partir da fonte real (Sets),
+        // para que o contador reflita novas curtidas mesmo sem recriar o item.
+        const likesSet = interactionsRef.current.likes[r.id];
+        return {
+          ...r,
+          likesCount: likesSet?.size || 0,
+          userLiked: auth.pubkey ? !!likesSet?.has(auth.pubkey) : !!r.userLiked,
+          replies: getNestedReplies(r.id, depth + 1)
+        };
+      });
+  };
+
   // Converte um evento Nostr em PostItem normalizado
   const eventToPostItem = useCallback((ev: NostrEvent, displayContent?: string): PostItem => {
     // Repost (NIP-18 kind 6): o conteúdo é o JSON do evento original, que fica
@@ -762,8 +785,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       userLiked: !!likesSet?.has(auth.pubkey || ''),
       repostsCount: repostsSet?.size || 0,
       userReposted: !!repostsSet?.has(auth.pubkey || ''),
-      repliesCount: replyList?.length || 0,
-      replies: replyList ? [...replyList] : [],
+      repliesCount: (interactionsRef.current.replies[ev.id]?.length) || 0,
+      replies: getNestedReplies(ev.id),
       media,
       isEncrypted: ev.content.startsWith('tribee2e:') || ev.content.includes('?iv='),
       groupId: groupTag,
@@ -875,9 +898,10 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
       }
       for (const ev of replyEvents || []) {
-        const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
-        if (eTag && eTag !== ev.id) {
-          const list = replies[eTag] || (replies[eTag] = []);
+        const eTags = ev.tags.filter(t => t[0] === 'e').map(t => t[1]);
+        const parentId = eTags.length ? eTags[eTags.length - 1] : undefined;
+        if (parentId && parentId !== ev.id) {
+          const list = replies[parentId] || (replies[parentId] = []);
           if (!list.some(r => r.id === ev.id)) {
             // Decifra respostas criptografadas para não exibir o conteúdo bruto no comentário
             let displayContent = ev.content;
@@ -904,9 +928,22 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         userLiked: auth.pubkey ? !!likes[p.id]?.has(auth.pubkey) : p.userLiked,
         repostsCount: reposts[p.id]?.size || 0,
         userReposted: auth.pubkey ? !!reposts[p.id]?.has(auth.pubkey) : p.userReposted,
-        repliesCount: replies[p.id]?.length || 0,
-        replies: replies[p.id] ? [...replies[p.id]] : []
+        repliesCount: (replies[p.id]?.length) || 0,
+        replies: getNestedReplies(p.id)
       })));
+
+      // Conta curtidas (kind 7) dirigidas diretamente aos comentários
+      try {
+        const commentIds = Array.from(new Set((replyEvents || []).map(ev => ev.id).filter(Boolean)));
+        if (commentIds.length > 0) {
+          const reactionEvents = await client.fetchEvents([{ kinds: [7], '#e': commentIds, limit: 100 }]);
+          for (const ev of reactionEvents || []) {
+            const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
+            if (eTag) (likes[eTag] || (likes[eTag] = new Set())).add(ev.pubkey);
+          }
+          setPosts(prev => prev.map(p => ({ ...p, replies: getNestedReplies(p.id) })));
+        }
+      } catch {}
     } catch (e) {
       console.error('Erro ao atualizar interações dos posts:', e);
     }
@@ -923,19 +960,23 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       });
     }
 
-    const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
+    const eTags = ev.tags.filter(t => t[0] === 'e').map(t => t[1]);
+    const rootId = eTags[0];
+    const parentId = eTags.length ? eTags[eTags.length - 1] : undefined;
 
-    if (eTag && eTag !== ev.id) {
-      // Comentário/resposta: fica restrito à thread do post original
+    if (parentId && parentId !== ev.id) {
+      // Comentário/resposta (NIP-10): a última tag "e" é o pai imediato
       const replyItem = eventToPostItem(ev, displayContent);
-      const list = interactionsRef.current.replies[eTag] || (interactionsRef.current.replies[eTag] = []);
+      const list = interactionsRef.current.replies[parentId] || (interactionsRef.current.replies[parentId] = []);
       if (!list.some(r => r.id === ev.id)) {
         list.push(replyItem);
       }
-      setPosts(prev => prev.map(p => p.id === eTag ? {
+      // Reconstrói a árvore de comentários aninhada no post raiz
+      const root = rootId && rootId !== ev.id ? rootId : parentId;
+      setPosts(prev => prev.map(p => p.id === root ? {
         ...p,
-        repliesCount: list.length,
-        replies: [...list]
+        repliesCount: (interactionsRef.current.replies[root]?.length) || 0,
+        replies: getNestedReplies(root)
       } : p));
       return false;
     }
@@ -1987,14 +2028,22 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
+    // Alterna o like no Set em memória (fonte da verdade para contagens),
+    // funcionando tanto para postagens quanto para comentários.
+    const likes = interactionsRef.current.likes[post.id] || (interactionsRef.current.likes[post.id] = new Set());
+    const userLiked = !likes.has(auth.pubkey);
+    if (userLiked) likes.add(auth.pubkey); else likes.delete(auth.pubkey);
+
+    // Para comentários, o post raiz é a primeira tag "e" do evento (NIP-10)
+    const rootId = post.event?.tags?.find(t => t[0] === 'e')?.[1] || post.id;
+
     setPosts(prev => prev.map(p => {
       if (p.id === post.id) {
-        const userLiked = !p.userLiked;
-        return {
-          ...p,
-          userLiked,
-          likesCount: userLiked ? p.likesCount + 1 : Math.max(0, p.likesCount - 1)
-        };
+        return { ...p, userLiked, likesCount: likes.size };
+      }
+      if (rootId !== post.id && p.id === rootId) {
+        // Reconstrói a árvore de comentários para refletir a curtida
+        return { ...p, replies: getNestedReplies(rootId) };
       }
       return p;
     }));
@@ -2002,12 +2051,12 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       await client.signAndSendEvent({
         kind: 7,
-        // NIP-25: tag "e" para o post e tag "p" para o AUTOR do post
+        // NIP-25: tag "e" para o post/comentário e tag "p" para o AUTOR
         tags: [['e', post.id], ['p', post.pubkey]],
         content: '❤️'
       }, auth.authMode, auth.secretKey);
     } catch (e) {
-      console.error('Erro ao curtir post:', e);
+      console.error('Erro ao curtir:', e);
     }
   };
 
@@ -2048,15 +2097,20 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   // Comentar (Kind 1 com tag "e" apontando para o post original)
-  const commentPost = async (postId: string, content: string, parentPubkey?: string): Promise<boolean> => {
+  const commentPost = async (rootId: string, content: string, parentPubkey?: string, parentId?: string): Promise<boolean> => {
     if (!auth.pubkey || auth.authMode === 'none') {
       setShowAuthModal(true);
       return false;
     }
 
-    const tags: string[][] = [
-      ['e', postId, '', 'root']
-    ];
+    // Resposta a um comentário (thread): inclui o root e o pai imediato (NIP-10)
+    const isReplyToComment = !!parentId && parentId !== rootId;
+    const tags: string[][] = isReplyToComment
+      ? [
+          ['e', rootId, '', 'root'],
+          ['e', parentId as string, '', 'reply']
+        ]
+      : [['e', rootId, '', 'root']];
     if (parentPubkey && parentPubkey !== auth.pubkey) {
       tags.push(['p', parentPubkey]);
     }
@@ -2070,14 +2124,16 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       if (signedEvent) {
         const replyItem = eventToPostItem(signedEvent, content);
-        const list = interactionsRef.current.replies[postId] || (interactionsRef.current.replies[postId] = []);
+        const attachTo = isReplyToComment ? (parentId as string) : rootId;
+        const list = interactionsRef.current.replies[attachTo] || (interactionsRef.current.replies[attachTo] = []);
         if (!list.some(r => r.id === signedEvent.id)) {
           list.push(replyItem);
         }
-        setPosts(prev => prev.map(p => p.id === postId ? {
+        // Reconstrói a árvore aninhada no post raiz
+        setPosts(prev => prev.map(p => p.id === rootId ? {
           ...p,
-          repliesCount: list.length,
-          replies: [...list]
+          repliesCount: (interactionsRef.current.replies[rootId]?.length) || 0,
+          replies: getNestedReplies(rootId)
         } : p));
         return true;
       }

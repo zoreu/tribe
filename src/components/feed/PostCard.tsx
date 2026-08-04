@@ -32,6 +32,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const [copiedId, setCopiedId] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [replyTo, setReplyTo] = useState<PostItem | null>(null);
   const [localComments, setLocalComments] = useState<Array<{ id: string; authorName: string; text: string; time: string }>>([]);
   const [displayText, setDisplayText] = useState<string>(post.content);
 
@@ -43,6 +44,46 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const displayPost = isRepost ? post.repostOf! : post;
   const originalProfile = isRepost ? (getProfile(displayPost.pubkey) || displayPost.author) : null;
   const relayReplies = displayPost.replies || [];
+
+  // Renderização recursiva de comentários aninhados (resposta a comentário)
+  const renderComment = (comment: PostItem, depth: number): React.ReactNode => {
+    const replyAuthor = getProfile(comment.pubkey) || comment.author;
+    return (
+      <div key={comment.id} className="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl text-xs space-y-1">
+      <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white gap-2">
+        <span className="truncate">{replyAuthor?.display_name || replyAuthor?.name || `Usuário ${comment.pubkey.slice(0, 8)}`}</span>
+        <span className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] text-slate-400 font-semibold">{new Date(comment.created_at * 1000).toLocaleString()}</span>
+          <button
+            type="button"
+            onClick={() => setReplyTo(comment)}
+            className="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline"
+          >
+            {t('respond')}
+          </button>
+        </span>
+      </div>
+        <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={comment.content} /></p>
+        <div className="pt-1 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => likePost(comment)}
+            className={`text-[10px] font-bold flex items-center gap-1 transition-colors ${
+              comment.userLiked ? 'text-red-500' : 'text-slate-400 hover:text-red-500'
+            }`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${comment.userLiked ? 'fill-red-500' : ''}`} />
+            <span>{comment.likesCount > 0 ? comment.likesCount : ''}</span>
+          </button>
+        </div>
+        {comment.replies && comment.replies.length > 0 && (
+          <div className="mt-2 space-y-2 border-l-2 border-slate-200 dark:border-slate-700 pl-3 ml-1">
+            {comment.replies.map(r => renderComment(r, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     const isEncrypted = post.content.startsWith('tribee2e:') || post.content.includes('?iv=');
@@ -87,7 +128,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
     } catch {}
   };
 
-  const handleAddComment = async (e: React.FormEvent) => {
+const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = commentText.trim();
     if (!text) return;
@@ -99,13 +140,19 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         id: optimisticId,
         authorName: auth.profile?.name || t('you'),
         text,
-        time: 'Agora'
+        time: t('now')
       }
     ]);
     setCommentText('');
 
-    // Publica o comentário nos relays como evento Kind 1 com tag "e" do post original
-    await commentPost(displayPost.id, text, displayPost.pubkey);
+    // Se está respondendo a um comentário, publica com root + reply (NIP-10);
+    // senão, comenta direto na postagem.
+    if (replyTo) {
+      await commentPost(displayPost.id, text, replyTo.pubkey, replyTo.id);
+      setReplyTo(null);
+    } else {
+      await commentPost(displayPost.id, text, displayPost.pubkey);
+    }
     // O comentário já aparece em post.replies; remove o otimista local para não duplicar
     setLocalComments(prev => prev.filter(c => c.id !== optimisticId));
   };
@@ -383,19 +430,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         {/* Seção de Comentários */}
         {showComments && (
           <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 space-y-3 animate-in fade-in duration-150">
-            {/* Lista de Comentários (dos relays) */}
-            {relayReplies.map(c => {
-              const replyAuthor = getProfile(c.pubkey) || c.author;
-              return (
-                <div key={c.id} className="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl text-xs space-y-1">
-                  <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
-                    <span>{replyAuthor?.display_name || replyAuthor?.name || `Usuário ${c.pubkey.slice(0, 8)}`}</span>
-                    <span className="text-[10px] text-slate-400">{new Date(c.created_at * 1000).toLocaleString()}</span>
-                  </div>
-                  <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={c.content} /></p>
-                </div>
-              );
-            })}
+            {/* Lista de Comentários (dos relays) — com respostas aninhadas */}
+            {relayReplies.map(c => renderComment(c, 0))}
 
             {/* Comentários otimistas do próprio usuário */}
             {localComments.map(c => (
@@ -408,11 +444,27 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
               </div>
             ))}
 
+            {/* Indicador de resposta a comentário */}
+            {replyTo && (
+              <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl px-3 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-300">
+                <span className="truncate">
+                  {t('respondingTo')} {getProfile(replyTo.pubkey)?.display_name || getProfile(replyTo.pubkey)?.name || 'comentário'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline shrink-0 ml-2"
+                >
+                  {t('cancelReply')}
+                </button>
+              </div>
+            )}
+
             {/* Form de Adicionar Comentário */}
             <form onSubmit={handleAddComment} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Escreva um comentário..."
+                placeholder={t('writeComment')}
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 className="flex-1 p-2 bg-slate-100 dark:bg-slate-900 rounded-xl border border-transparent focus:border-blue-500 text-xs text-slate-900 dark:text-white focus:outline-none"
