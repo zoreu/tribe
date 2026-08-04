@@ -225,13 +225,13 @@ async function getSenderName(pubkey) {
 
 async function sendPush(sub, tag, senderPubkey) {
   const senderName = senderPubkey ? await getSenderName(senderPubkey) : '';
-  const title = senderName ? `Mensagem de ${senderName}` : 'Nova mensagem no Tribe';
+  const title = senderName ? `Message from ${senderName}` : 'New message on Tribe';
   // Abre a conversa com quem enviou (senderPubkey), não com o destinatário
   const chatPubkey = senderPubkey || sub.pubkey;
   try {
     await webpush.sendNotification(sub.subscription, JSON.stringify({
       title,
-      body: 'Você recebeu uma nova mensagem privada.',
+      body: 'You have received a new private message.',
       tag,
       url: `/?chat=${encodeURIComponent(chatPubkey)}`
     }));
