@@ -392,7 +392,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
                     <span>{replyAuthor?.display_name || replyAuthor?.name || `Usuário ${c.pubkey.slice(0, 8)}`}</span>
                     <span className="text-[10px] text-slate-400">{new Date(c.created_at * 1000).toLocaleString()}</span>
                   </div>
-                  <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap">{linkifyText(c.content)}</p>
+                  <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={c.content} /></p>
                 </div>
               );
             })}
@@ -404,7 +404,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
                   <span>{c.authorName}</span>
                   <span className="text-[10px] text-slate-400">{c.time}</span>
                 </div>
-                <p className="text-slate-700 dark:text-slate-300">{c.text}</p>
+                <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={c.text} /></p>
               </div>
             ))}
 
