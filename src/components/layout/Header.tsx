@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { NotificationBell } from './NotificationBell';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   Home, 
   Users, 
@@ -32,8 +34,12 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
     relays, 
     triggerPwaInstall, 
     pwaPrompt,
-    isMobile
+    isMobile,
+    groups,
+    joinedGroupIds,
+    setSelectedGroupId
   } = useNostr();
+  const { t } = useLanguage();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -50,6 +56,9 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
   };
 
   const activeRelaysCount = relays.filter(r => r.read || r.write).length;
+
+  // Apenas os grupos nos quais o usuário realmente entrou
+  const myGroups = groups.filter(g => joinedGroupIds.includes(g.id));
 
   return (
     <header className="sticky top-0 z-40 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm">
@@ -75,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar no Tribe (pesquisar posts ou pessoas)..."
+              placeholder={t('searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-9 py-2 bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-blue-500 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-800 dark:text-slate-200"
@@ -84,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
-                title="Limpar busca"
+                title={t('clearSearch')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -101,7 +110,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
-            title="Feed de Notícias"
+            title={t('titleFeed')}
           >
             <Home className="w-6 h-6" />
           </button>
@@ -113,7 +122,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
-            title="Amigos & Bate-papo E2EE"
+            title={t('titleFriends')}
           >
             <Users className="w-6 h-6" />
           </button>
@@ -125,7 +134,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
-            title="Reels & Vídeos"
+            title={t('titleReels')}
           >
             <Film className="w-6 h-6" />
           </button>
@@ -137,7 +146,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
-            title="Grupos & Comunidades"
+            title={t('titleGroups')}
           >
             <GroupIcon className="w-6 h-6" />
           </button>
@@ -150,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
           <button
             onClick={onOpenRelaysModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors"
-            title="Gerenciar Relays Nostr"
+            title={t('relayManager')}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <Radio className="w-3.5 h-3.5" />
@@ -164,8 +173,11 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
             title="Instalar Aplicativo PWA"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">{pwaPrompt ? 'Instalar App' : 'App PWA'}</span>
+            <span className="hidden lg:inline">{pwaPrompt ? t('installApp') : t('appPwa')}</span>
           </button>
+
+          {/* Sininho de Mensagens (notificações de conversas privadas) */}
+          <NotificationBell />
 
           {/* Usuário / Botão Login */}
           {auth.pubkey ? (
@@ -187,7 +199,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
               <button
                 onClick={logout}
                 className="p-2 text-slate-500 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Sair"
+                title={t('logout')}
               >
                 <LogOut className="w-5 h-5" />
               </button>
@@ -212,29 +224,32 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
         </div>
       </div>
 
+      {/* Busca fixa no mobile (abaixo do header), igual à do desktop */}
+      <div className="md:hidden px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="relative max-w-2xl mx-auto">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar pessoas, grupos ou posts..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-9 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
+              title={t('clearSearch')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Menu dropdown para Mobile */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 space-y-2 animate-in slide-in-from-top-2">
-          <div className="relative mb-3">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar no Tribe..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-9 py-2 bg-slate-100 dark:bg-slate-800 rounded-full text-sm text-slate-800 dark:text-slate-200"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
-                title="Limpar busca"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
           <div className="grid grid-cols-2 gap-2 pt-1">
             <button
               onClick={() => { setActiveTab('feed'); setMobileMenuOpen(false); }}
@@ -243,7 +258,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
               }`}
             >
               <Home className="w-5 h-5" />
-              Feed
+              {t('feed')}
             </button>
 
             <button
@@ -253,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
               }`}
             >
               <Users className="w-5 h-5" />
-              Amigos (Chat)
+              {t('friends')}
             </button>
 
             <button
@@ -263,7 +278,7 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
               }`}
             >
               <Film className="w-5 h-5" />
-              Reels
+              {t('reels')}
             </button>
 
             <button
@@ -273,11 +288,55 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
               }`}
             >
               <GroupIcon className="w-5 h-5" />
-              Grupos
+              {t('groups')}
             </button>
+          </div>
+
+          {/* Meus Grupos no mobile (mesmos atalhos da sidebar desktop) */}
+          <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between px-1 mb-2">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{t('myGroups')}</span>
+              <button
+                onClick={() => { setActiveTab('groups'); setMobileMenuOpen(false); }}
+                className="text-[11px] font-bold text-blue-500 hover:underline"
+              >
+                Ver todos
+              </button>
+            </div>
+            {myGroups.length === 0 ? (
+              <button
+                onClick={() => { setActiveTab('groups'); setMobileMenuOpen(false); }}
+                className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 text-xs font-semibold text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors"
+              >
+                {t('noGroupsJoined')} {t('exploreGroups2')}
+              </button>
+            ) : (
+              <div className="space-y-1">
+                {myGroups.map(g => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      setSelectedGroupId(g.id);
+                      setActiveTab('groups');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors text-left"
+                  >
+                    <img src={g.picture} alt={g.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{g.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
     </header>
   );
 };
+
+
+
+
+
+

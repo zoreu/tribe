@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NostrProvider, useNostr } from './context/NostrContext';
+import { useLanguage } from './context/LanguageContext';
 import { Header } from './components/layout/Header';
 import { SidebarLeft } from './components/layout/SidebarLeft';
 import { SidebarRight } from './components/layout/SidebarRight';
@@ -166,8 +167,9 @@ const MainAppContent: React.FC = () => {
     setActiveChatPubkey,
     isFriend,
     friends,
-    deepLink
+deepLink
   } = useNostr();
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
   const [feedMode, setFeedMode] = useState<'friends' | 'global' | 'mine'>('friends');
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
@@ -191,6 +193,9 @@ const MainAppContent: React.FC = () => {
       const q = searchQuery.toLowerCase();
       const matches = (
         p.content.toLowerCase().includes(q) ||
+        p.repostOf?.content?.toLowerCase().includes(q) ||
+        p.repostOf?.author?.name?.toLowerCase().includes(q) ||
+        p.repostOf?.author?.display_name?.toLowerCase().includes(q) ||
         p.author?.name?.toLowerCase().includes(q) ||
         p.author?.display_name?.toLowerCase().includes(q)
       );
@@ -249,7 +254,7 @@ const MainAppContent: React.FC = () => {
                     onClick={() => auth.pubkey ? setIsPostModalOpen(true) : setShowAuthModal(true)}
                     className="flex-1 text-left px-4 py-3 bg-slate-100 dark:bg-slate-900/60 hover:bg-slate-200/80 dark:hover:bg-slate-900 rounded-full text-sm font-semibold text-slate-500 dark:text-slate-400 transition-colors truncate"
                   >
-                    {auth.profile?.name ? `${auth.profile.name}, no que você está pensando?` : 'No que você está pensando? Publique no Tribe...'}
+                    {auth.profile?.name ? `${auth.profile.name}, ${t('whatAreYouThinking')}` : t('composerPlaceholder')}
                   </button>
                 </div>
 
@@ -259,7 +264,7 @@ const MainAppContent: React.FC = () => {
                     className="flex items-center gap-2 p-1.5 hover:text-blue-600 transition-colors"
                   >
                     <Sparkles className="w-4 h-4 text-blue-500" />
-                    <span>Publicação Livre</span>
+                    <span>{t('freePost')}</span>
                   </button>
 
                   <button 
@@ -267,7 +272,7 @@ const MainAppContent: React.FC = () => {
                     className="flex items-center gap-2 p-1.5 hover:text-amber-600 transition-colors"
                   >
                     <Lock className="w-4 h-4 text-amber-500" />
-                    <span>Anti-Censura E2EE</span>
+                    <span>{t('antiCensorship')}</span>
                   </button>
                 </div>
               </div>
@@ -283,7 +288,7 @@ const MainAppContent: React.FC = () => {
                   }`}
                 >
                   <Users className="w-4 h-4" />
-                  <span>Amigos & Eu</span>
+                  <span>{t('friendsAndMe')}</span>
                   {friends.length > 0 && (
                     <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
                       feedMode === 'friends' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
@@ -314,7 +319,7 @@ const MainAppContent: React.FC = () => {
                   }`}
                 >
                   <User className="w-4 h-4" />
-                  <span>Minhas</span>
+                  <span>{t('mineFilterLabel')}</span>
                 </button>
               </div>
 
@@ -448,3 +453,4 @@ export default function App() {
     </NostrProvider>
   );
 }
+

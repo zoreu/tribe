@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { PostCard } from './PostCard';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface SearchResultsProps {
   query: string;
@@ -23,6 +24,7 @@ interface SearchResultsProps {
 
 export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) => {
   const { groups, profiles, posts, getProfile, setSelectedGroupId, setActiveTab, setActiveChatPubkey, isFriend, addFriend } = useNostr();
+  const { t } = useLanguage();
   const [selectedProfilePubkey, setSelectedProfilePubkey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -99,7 +101,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 break-all font-mono">{selectedProfile.npub}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">{selectedProfile.npub}</p>
                 {selectedProfile.about && (
                   <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{selectedProfile.about}</p>
                 )}
@@ -143,11 +145,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
           {/* Postagens do perfil */}
           <div className="p-5 space-y-4">
             <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-              Publicações de {selectedProfile.display_name || selectedProfile.name} ({selectedProfilePosts.length})
+              {t('postsOf')} {selectedProfile.display_name || selectedProfile.name} ({selectedProfilePosts.length})
             </h4>
             {selectedProfilePosts.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs font-semibold bg-slate-50 dark:bg-slate-900/40 rounded-2xl">
-                Nenhuma publicação encontrada para este perfil.
+                {t('noPostsProfile')}
               </div>
             ) : (
               <div className="space-y-4">
@@ -174,16 +176,16 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
     <div className="space-y-5">
       <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 px-1">
         <Search className="w-4 h-4 text-indigo-500" />
-        <span>Resultados para “{query}”</span>
+        <span>{t('resultsFor')} “{query}”</span>
       </div>
 
       {/* Pessoas */}
       <section className="space-y-2">
         <h3 className="font-extrabold text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 px-1">
-          <UserIcon className="w-3.5 h-3.5" /> Pessoas ({matchingProfiles.length})
+          <UserIcon className="w-3.5 h-3.5" /> {t('people')} ({matchingProfiles.length})
         </h3>
         {matchingProfiles.length === 0 ? (
-          <div className="px-1 text-xs text-slate-400">Nenhuma pessoa encontrada.</div>
+          <div className="px-1 text-xs text-slate-400">{t('noPeopleFound')}</div>
         ) : (
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-2 space-y-1">
             {matchingProfiles.map(profile => (
@@ -209,7 +211,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
                 <button
                   onClick={() => handleSendMessage(profile.pubkey)}
                   className="shrink-0 p-2 rounded-lg bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-400 transition-colors"
-                  title="Enviar mensagem privada"
+                  title={t('sendPrivate')}
                 >
                   <MessageSquare className="w-4 h-4" />
                 </button>
@@ -217,7 +219,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
                 <button
                   onClick={() => setSelectedProfilePubkey(profile.pubkey)}
                   className="shrink-0 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                  title="Ver perfil completo"
+                  title={t('viewFullProfile')}
                 >
                   Ver perfil →
                 </button>
@@ -230,10 +232,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
       {/* Grupos */}
       <section className="space-y-2">
         <h3 className="font-extrabold text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 px-1">
-          <GroupIcon className="w-3.5 h-3.5" /> Grupos ({matchingGroups.length})
+          <GroupIcon className="w-3.5 h-3.5" /> {t('groups')} ({matchingGroups.length})
         </h3>
         {matchingGroups.length === 0 ? (
-          <div className="px-1 text-xs text-slate-400">Nenhum grupo encontrado.</div>
+          <div className="px-1 text-xs text-slate-400">{t('noGroupsFound')}</div>
         ) : (
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm p-2 space-y-1">
             {matchingGroups.map(group => (
@@ -247,7 +249,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
                   <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">{group.name}</h4>
                   <p className="text-[11px] text-slate-400 truncate">{group.description}</p>
                 </div>
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">Abrir grupo →</span>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">{t('openGroup')} →</span>
               </button>
             ))}
           </div>
@@ -257,10 +259,10 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
       {/* Postagens */}
       <section className="space-y-2">
         <h3 className="font-extrabold text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 px-1">
-          <FileText className="w-3.5 h-3.5" /> Publicações ({matchingPosts.length})
+          <FileText className="w-3.5 h-3.5" /> {t('posts')} ({matchingPosts.length})
         </h3>
         {matchingPosts.length === 0 ? (
-          <div className="px-1 text-xs text-slate-400">Nenhuma publicação encontrada.</div>
+          <div className="px-1 text-xs text-slate-400">{t('noPostsFound')}</div>
         ) : (
           <div className="space-y-4">
             {matchingPosts.map(post => (

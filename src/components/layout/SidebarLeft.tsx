@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   Home, 
   Users, 
@@ -21,6 +22,7 @@ interface SidebarLeftProps {
 
 export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenRelaysModal }) => {
   const { activeTab, setActiveTab, auth, groups, joinedGroupIds, setSelectedGroupId, setShowAuthModal, totalUnreadMessages } = useNostr();
+  const { t } = useLanguage();
 
   // Apenas os grupos nos quais o usuário realmente entrou aparecem em "Seus Grupos"
   const myGroups = groups.filter(g => joinedGroupIds.includes(g.id));
@@ -54,7 +56,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
         className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all flex items-center justify-center gap-2"
       >
         <PlusCircle className="w-5 h-5" />
-        <span>Publicar no Tribe</span>
+        <span>{t('publishOnTribe')}</span>
       </button>
 
       {/* Menu Principal */}
@@ -68,7 +70,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
           }`}
         >
           <Home className="w-5 h-5 text-blue-500" />
-          <span>Feed Principal</span>
+          <span>{t('mainFeed')}</span>
         </button>
 
         <button
@@ -81,7 +83,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
         >
           <div className="flex items-center gap-3">
             <Users className="w-5 h-5 text-indigo-500" />
-            <span>Amigos & Chat E2EE</span>
+            <span>{t('friendsChat')}</span>
           </div>
           {totalUnreadMessages > 0 && (
             <span className="bg-rose-500 text-white font-extrabold text-xs px-2 py-0.5 rounded-full animate-pulse shadow-sm">
@@ -111,7 +113,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
           }`}
         >
           <GroupIcon className="w-5 h-5 text-emerald-500" />
-          <span>Grupos e Comunidades</span>
+          <span>{t('groupCommunities')}</span>
         </button>
 
         <button
@@ -119,27 +121,27 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
           className="w-full flex items-center gap-3 p-3 rounded-xl font-bold text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
         >
           <Radio className="w-5 h-5 text-amber-500" />
-          <span>Gerenciador de Relays</span>
+          <span>{t('relayManager')}</span>
         </button>
       </div>
 
       {/* Atalhos para Grupos (apenas os que o usuário entrou) */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
         <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-          <span>Seus Grupos</span>
-          <button onClick={() => setActiveTab('groups')} className="text-blue-500 hover:underline">Ver todos</button>
+          <span>{t('myGroups')}</span>
+          <button onClick={() => setActiveTab('groups')} className="text-blue-500 hover:underline">{t('viewAll')}</button>
         </div>
 
         {myGroups.length === 0 ? (
           <div className="p-3 text-center bg-slate-50 dark:bg-slate-900/40 rounded-xl">
             <p className="text-[11px] text-slate-400 font-semibold leading-tight">
-              Você ainda não entrou em nenhum grupo.
+              {t('noGroupsJoined')}
             </p>
             <button
               onClick={() => setActiveTab('groups')}
               className="mt-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
             >
-              Explorar e entrar em grupos →
+              {t('exploreGroups')}
             </button>
           </div>
         ) : (
@@ -175,13 +177,17 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
       <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white space-y-2 border border-slate-800 shadow-md">
         <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
           <ShieldCheck className="w-4 h-4" />
-          <span>Garantia de Anti-Censura</span>
+          <span>{t('antiCensorshipGuarantee')}</span>
         </div>
         <p className="text-xs text-slate-300 leading-relaxed">
-          Tribe é 100% descentralizado. Suas postagens são assinadas por criptografia e propagadas diretamente nos relays WebSocket.
+          {t('antiCensorshipDesc')}
         </p>
       </div>
 
     </aside>
   );
 };
+
+
+
+

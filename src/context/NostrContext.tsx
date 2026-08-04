@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useCallback, useRef } from 'react';
+import { useLanguage } from './LanguageContext';
 import { 
   AuthState, 
   NostrEvent, 
@@ -14,6 +15,18 @@ import {
 import { NostrClient, DEFAULT_RELAYS } from '../lib/nostr/client';
 import { MOCK_POSTS, MOCK_PROFILES, MOCK_GROUPS } from '../lib/nostr/mockData';
 import { extractMediaUrls } from '../lib/nostr/media';
+
+// Converte uma chave VAPID base64url para Uint8Array (exigido pela Push API)
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 interface NostrContextType {
   auth: AuthState;
@@ -36,6 +49,9 @@ interface NostrContextType {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
 
+  viewProfilePubkey: string | null;
+  setViewProfilePubkey: (pubkey: string | null) => void;
+
   selectedGroupId: string | null;
   setSelectedGroupId: (id: string | null) => void;
 
@@ -45,6 +61,7 @@ interface NostrContextType {
   repostPost: (post: PostItem) => Promise<void>;
   commentPost: (postId: string, content: string, parentPubkey?: string) => Promise<boolean>;
   deletePost: (postId: string) => Promise<boolean>;
+  loadNote: (id: string) => Promise<PostItem | null>;
 
   groups: TribeGroup[];
   createGroup: (name: string, description: string, picture?: string, banner?: string) => Promise<TribeGroup>;
@@ -64,12 +81,15 @@ interface NostrContextType {
   chats: Record<string, ChatMessage[]>;
   activeChatPubkey: string | null;
   setActiveChatPubkey: (pubkey: string | null) => void;
+  chatLoading: boolean;
   sendDirectMessage: (receiverPubkey: string, text: string, mediaUrl?: string) => Promise<boolean>;
 
   unreadChats: Record<string, number>;
   totalUnreadMessages: number;
   latestNotification: NotificationItem | null;
   clearNotification: () => void;
+  requestNotificationPermission: () => Promise<void>;
+  pushEnabled: boolean;
 
   profiles: Record<string, UserProfile>;
   getProfile: (pubkey: string) => UserProfile;
@@ -103,6 +123,7 @@ const persistOwnProfile = (profile: UserProfile | undefined) => {
 };
 
 export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { t } = useLanguage();
   // --- Estados de Autenticação ---
   const [auth, setAuth] = useState<AuthState>(() => {
     try {
@@ -228,6 +249,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // --- Estado de Navegação e Tabs ---
   const [activeTab, setActiveTab] = useState<TabType>('feed');
+
+  // Pubkey do perfil que o usuário está visualizando (null = próprio perfil)
+  const [viewProfilePubkey, setViewProfilePubkeyState] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   // --- Posts, Grupos e Mensagens ---
@@ -240,6 +264,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           // Migração: respostas (tag "e") não devem ser posts soltos no feed;
           // reanexa-as ao post pai em vez de exibi-las separadas.
           const isReply = (p: PostItem) => {
+            if (p.kind === 6) return false; // reposts não são respostas
             const eTag = p.tags?.find(t => t[0] === 'e')?.[1];
             return !!eTag && eTag !== p.id;
           };
@@ -401,28 +426,161 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   });
 
   // --- Notificações de Mensagem e Mensagens Não Lidas ---
-  const [unreadChats, setUnreadChats] = useState<Record<string, number>>({});
   const [latestNotification, setLatestNotification] = useState<NotificationItem | null>(null);
+  const [pushEnabled, setPushEnabled] = useState(false);
 
   const clearNotification = useCallback(() => {
     setLatestNotification(null);
   }, []);
 
+  // Solicita a permissão de notificação do navegador/PWA (usada pelo sistema
+  // de alertas de mensagens privadas).
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch (e) {
+        console.error('Erro ao solicitar permissão de notificação:', e);
+      }
+    }
+  }, []);
+
+  // Inscreve o dispositivo em Web Push para receber notificações de mensagens
+  // mesmo com o app fechado/em segundo plano (celular/PWA).
+  const subscribeToPush = useCallback(async (pubkey: string) => {
+    try {
+      if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      const res = await fetch('/api/push/vapid-public-key', { cache: 'no-store' });
+      if (!res.ok) return;
+      const { publicKey } = await res.json();
+      if (!publicKey) return;
+
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      const subscription = existing || await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pubkey, subscription: subscription.toJSON() })
+      });
+      setPushEnabled(true);
+    } catch (e) {
+      console.warn('Falha ao configurar push notifications:', e);
+    }
+  }, []);
+
+  // Quando o usuário entra com uma conta, pede permissão de notificação e,
+  // se concedida, inscreve o dispositivo em Web Push para receber avisos de
+  // mensagens mesmo com o app fechado/em segundo plano.
+  useEffect(() => {
+    if (!auth.pubkey) return;
+    const setup = async () => {
+      if (typeof window === 'undefined' || !('Notification' in window)) return;
+      if (Notification.permission === 'default') {
+        await requestNotificationPermission();
+      }
+      if (Notification.permission === 'granted') {
+        await subscribeToPush(auth.pubkey);
+      }
+    };
+    setup();
+  }, [auth.pubkey, requestNotificationPermission, subscribeToPush]);
+
+  // Última leitura por conversa (timestamp), persistida por conta. Mensagens
+  // recebidas após esse momento são consideradas não lidas (estilo Facebook).
+  const chatsRef = useRef<Record<string, ChatMessage[]>>({});
+  const lastReadRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    chatsRef.current = chats;
+  }, [chats]);
+
+  useEffect(() => {
+    if (!auth.pubkey) return;
+    try {
+      const saved = localStorage.getItem(`tribe_nostr_lastread_${auth.pubkey}`);
+      lastReadRef.current = saved ? JSON.parse(saved) : {};
+    } catch {
+      lastReadRef.current = {};
+    }
+  }, [auth.pubkey]);
+
+  // Marca uma conversa como lida (atualiza o marcador de leitura e persiste)
+  const markChatRead = useCallback((pubkey: string | null) => {
+    if (!pubkey) return;
+    const messages = chatsRef.current[pubkey];
+    const lastTs = messages && messages.length > 0
+      ? Math.max(messages[messages.length - 1].created_at, Date.now() / 1000)
+      : Date.now() / 1000;
+    lastReadRef.current = { ...lastReadRef.current, [pubkey]: lastTs };
+    try {
+      localStorage.setItem(`tribe_nostr_lastread_${auth.pubkey}`, JSON.stringify(lastReadRef.current));
+    } catch {}
+  }, [auth.pubkey]);
+
+  // Mensagens não lidas = mensagens recebidas após o último momento de leitura
+  // da conversa, desconsiderando a conversa que está aberta no momento.
+  const unreadChats = useMemo<Record<string, number>>(() => {
+    const result: Record<string, number> = {};
+    Object.keys(chats).forEach(pk => {
+      if (pk === activeChatPubkeyState) return;
+      const lastRead = lastReadRef.current[pk] || 0;
+      const count = chats[pk].filter(m => m.senderPubkey !== auth.pubkey && m.created_at > lastRead).length;
+      if (count > 0) result[pk] = count;
+    });
+    return result;
+  }, [chats, auth.pubkey, activeChatPubkeyState]);
+
   const totalUnreadMessages = useMemo(() => {
     return Object.values(unreadChats).reduce((a: number, b: number) => a + b, 0);
   }, [unreadChats]);
 
+  // True enquanto as mensagens da conversa ativa ainda não foram carregadas
+  const [chatLoading, setChatLoading] = useState(false);
+
   const setActiveChatPubkey = useCallback((pubkey: string | null) => {
     setActiveChatPubkeyState(pubkey);
     if (pubkey) {
-      setUnreadChats(prev => {
-        if (!prev[pubkey]) return prev;
-        const next = { ...prev };
-        delete next[pubkey];
-        return next;
-      });
+      markChatRead(pubkey);
+      // Se ainda não há mensagens carregadas para essa conversa, mostra
+      // "Carregando mensagens..." até as mensagens chegarem dos relays.
+      const msgs = chatsRef.current[pubkey];
+      setChatLoading(!msgs || msgs.length === 0);
+    } else {
+      setChatLoading(false);
     }
-  }, []);
+  }, [markChatRead]);
+
+  // Encerra o "Carregando mensagens..." assim que a conversa ativa recebe
+  // mensagens (do fetch inicial ou em tempo real).
+  useEffect(() => {
+    if (!activeChatPubkeyState) return;
+    const msgs = chats[activeChatPubkeyState];
+    if (msgs && msgs.length > 0) {
+      setChatLoading(false);
+    }
+  }, [chats, activeChatPubkeyState]);
+
+  // Abre a conversa de uma notificação pendente assim que o chat ativo estiver
+  // disponível (depende de setActiveChatPubkey, declarado acima).
+  useEffect(() => {
+    if (!auth.pubkey) return;
+    let pending: string | null = null;
+    try {
+      pending = localStorage.getItem('tribe_pending_chat');
+      localStorage.removeItem('tribe_pending_chat');
+    } catch {}
+    if (pending) {
+      setActiveChatPubkey(pending);
+      setActiveTab('friends');
+    }
+  }, [auth.pubkey, setActiveChatPubkey, setActiveTab]);
 
   // --- Deep Linking & URL Share ---
   const [deepLink, setDeepLink] = useState<DeepLinkParams>({});
@@ -552,7 +710,27 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Converte um evento Nostr em PostItem normalizado
   const eventToPostItem = useCallback((ev: NostrEvent, displayContent?: string): PostItem => {
-    const content = displayContent ?? ev.content;
+    // Repost (NIP-18 kind 6): o conteúdo é o JSON do evento original, que fica
+    // embutido em "repostOf" para exibir estilo Twitter.
+    let repostOf: PostItem | undefined;
+    if (ev.kind === 6) {
+      try {
+        const orig = JSON.parse(ev.content || '{}');
+        if (orig && orig.id && typeof orig.id === 'string') {
+          // Se o original for outro repost, usa a postagem interna (evita aninhamento)
+          let base = orig;
+          if (orig.kind === 6) {
+            try {
+              const inner = JSON.parse(orig.content || '{}');
+              if (inner && inner.id) base = inner;
+            } catch {}
+          }
+          repostOf = eventToPostItem(base);
+        }
+      } catch {}
+    }
+
+    const content = repostOf ? '' : (displayContent ?? ev.content);
     const { textWithoutMedia, media } = extractMediaUrls(content);
     // Identifica o grupo do post: prioriza a tag "h" (id do grupo) e, caso
     // só exista a tag "a" (endereço NIP-29), normaliza removendo o prefixo
@@ -589,7 +767,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       media,
       isEncrypted: ev.content.startsWith('tribee2e:') || ev.content.includes('?iv='),
       groupId: groupTag,
-      isReel
+      isReel,
+      repostOf
     };
   }, [getProfile, auth.pubkey]);
 
@@ -602,6 +781,26 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   // Evita buscar o perfil (kind 0) do mesmo pubkey repetidamente
   const fetchedProfilesRef = useRef<Set<string>>(new Set());
+
+  // Busca o perfil (kind 0) de um autor se ainda não estiver carregado,
+  // para exibir o nome real (em vez do nome padrão) em reposts e referências.
+  const ensureProfileLoaded = useCallback((pubkey: string) => {
+    if (!pubkey || typeof pubkey !== 'string') return;
+    if (fetchedProfilesRef.current.has(pubkey)) return;
+    fetchedProfilesRef.current.add(pubkey);
+    client.fetchUserProfile(pubkey).then(p => {
+      if (p) setProfiles(prev => ({ ...prev, [pubkey]: p }));
+    });
+  }, [client]);
+
+  // Abre o perfil de um usuário (ou volta ao próprio perfil com null)
+  const setViewProfilePubkey = useCallback((pubkey: string | null) => {
+    setViewProfilePubkeyState(pubkey);
+    if (pubkey) {
+      setActiveTab('profile');
+      ensureProfileLoaded(pubkey);
+    }
+  }, [ensureProfileLoaded]);
 
   const DEFAULT_GROUP_PICTURE = 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&auto=format&fit=crop&q=80';
   const DEFAULT_GROUP_BANNER = 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=800&auto=format&fit=crop&q=80';
@@ -666,6 +865,14 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       for (const ev of repostEvents || []) {
         const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
         if (eTag) (reposts[eTag] || (reposts[eTag] = new Set())).add(ev.pubkey);
+        // Adiciona o repost ao feed como postagem (estilo Twitter)
+        const repostItem = eventToPostItem(ev);
+        const originalAuthor = ev.tags.find(t => t[0] === 'p')?.[1];
+        if (originalAuthor) ensureProfileLoaded(originalAuthor);
+        setPosts(prev => {
+          if (prev.some(p => p.id === ev.id)) return prev;
+          return [repostItem, ...prev].sort((a, b) => b.created_at - a.created_at);
+        });
       }
       for (const ev of replyEvents || []) {
         const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
@@ -791,6 +998,26 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     refreshPostInteractions(ids);
   }, [client, auth.authMode, auth.secretKey, auth.pubkey, ingestPostEvent, refreshPostInteractions]);
+
+  // Busca uma postagem por id nos relays e a retorna (SEM ingerir no feed,
+  // para não duplicar a postagem embutida como um post separado). Usado pelas
+  // referências nostr:nevent/note.
+  const loadNote = useCallback(async (id: string): Promise<PostItem | null> => {
+    let events: NostrEvent[] = [];
+    try {
+      events = await Promise.race([
+        client.fetchEvents([{ kinds: [1, 6], ids: [id], limit: 1 }]),
+        new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 6000))
+      ]);
+    } catch {}
+
+    const ev = events && events[0];
+    if (!ev) return null;
+
+    ensureProfileLoaded(ev.pubkey);
+
+    return eventToPostItem(ev);
+  }, [client, eventToPostItem, ensureProfileLoaded]);
 
   // Ao selecionar um grupo (pela busca, carrossel ou link compartilhado),
   // busca as postagens dele nos relays para que usuários novos também vejam
@@ -1113,6 +1340,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } catch (err) {
       console.error('Erro ao buscar dados do usuário nos relays:', err);
     }
+    setChatLoading(false);
   }, [auth.pubkey, auth.authMode, auth.secretKey, client, getProfile, eventToPostItem, refreshPostInteractions, ingestPostEvent]);
 
   // Carrega ativamente os dados do usuário dos relays ao autenticar
@@ -1121,6 +1349,49 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       loadUserDataFromRelays(auth.pubkey);
     }
   }, [auth.pubkey, loadUserDataFromRelays]);
+
+  // Quando o app/PWA volta para o primeiro plano (ou ganha foco), re-sincroniza
+  // os dados do usuário e a assinatura de push. Também re-inscreve o push
+  // periodicamente e quando a Service Worker avisar que a assinatura renovou,
+  // garantindo que o servidor sempre tenha a assinatura válida do dispositivo.
+  const lastRefetchRef = useRef(0);
+  useEffect(() => {
+    if (!auth.pubkey) return;
+
+    const onVisible = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - lastRefetchRef.current < 15000) return;
+      lastRefetchRef.current = now;
+      loadUserDataFromRelays(auth.pubkey);
+      subscribeToPush(auth.pubkey);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'push-renewed') {
+        subscribeToPush(auth.pubkey);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    // Mantém a assinatura de push sempre válida no servidor
+    const interval = setInterval(() => subscribeToPush(auth.pubkey), 4 * 60 * 1000);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', onMessage);
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      clearInterval(interval);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', onMessage);
+      }
+    };
+  }, [auth.pubkey, loadUserDataFromRelays, subscribeToPush]);
 
   // Busca os perfis (kind 0) dos amigos que ainda não estão carregados no estado profiles
   useEffect(() => {
@@ -1265,13 +1536,23 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
             // Notificação para mensagens recebidas de outros usuários
             if (event.pubkey !== auth.pubkey) {
-              setUnreadChats(prev => {
-                const count = prev[otherPubkey] || 0;
-                return { ...prev, [otherPubkey]: count + 1 };
-              });
-
               const senderProfile = getProfile(event.pubkey);
               const senderName = senderProfile.display_name || senderProfile.name || 'Um amigo';
+
+              // Dispara a notificação push via servidor (caminho confiável,
+              // funciona mesmo que a notificação da página seja suprimida).
+              try {
+                fetch('/api/push/send', {
+                  method: 'POST',
+                  cache: 'no-store',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    pubkey: auth.pubkey,
+                    senderPubkey: event.pubkey,
+                    senderName
+                  })
+                });
+              } catch {}
 
               setLatestNotification({
                 id: event.id,
@@ -1281,11 +1562,60 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
               });
 
               if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+                const notifTitle = `Mensagem de ${senderName}`;
+                const notifUrl = `/?chat=${encodeURIComponent(event.pubkey)}`;
+
+                const showInPageNotification = () => {
+                  try {
+                    const notif = new Notification(notifTitle, {
+                      body: decryptedText,
+                      tag: `dm-${event.pubkey}`
+                    });
+                    notif.onclick = () => {
+                      window.focus();
+                      try {
+                        localStorage.setItem('tribe_pending_chat', event.pubkey);
+                      } catch {}
+                      setActiveChatPubkey(event.pubkey);
+                      setActiveTab('friends');
+                      setLatestNotification({
+                        id: event.id,
+                        title: notifTitle,
+                        body: decryptedText.length > 60 ? decryptedText.slice(0, 60) + '...' : decryptedText,
+                        senderPubkey: event.pubkey
+                      });
+                      notif.close();
+                    };
+                  } catch {}
+                };
+
                 try {
-                  new Notification(`Mensagem de ${senderName}`, {
-                    body: decryptedText
-                  });
-                } catch {}
+                  if ('serviceWorker' in navigator) {
+                    // Aguarda a Service Worker ficar pronta e entrega a notificação
+                    // a ela (funciona mesmo que a página ainda não esteja sob
+                    // controle da SW; o Chrome/Windows não suprime notificações
+                    // de SW quando a aba está em foco).
+                    navigator.serviceWorker.ready
+                      .then(reg => {
+                        if (reg.active) {
+                          reg.active.postMessage({
+                            type: 'notify',
+                            title: notifTitle,
+                            body: decryptedText,
+                            tag: `dm-${event.pubkey}`,
+                            url: notifUrl
+                          });
+                        } else {
+                          showInPageNotification();
+                        }
+                      })
+                      .catch(() => showInPageNotification());
+                  } else {
+                    showInPageNotification();
+                  }
+                } catch {
+                  showInPageNotification();
+                }
               }
             }
           }
@@ -1324,6 +1654,18 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             repostsCount: reposts.size,
             userReposted: event.pubkey === auth.pubkey ? true : p.userReposted
           } : p));
+
+          // Adiciona o repost como uma postagem no feed (estilo Twitter):
+          // autor = quem repostou, com o original embutido em "repostOf".
+          const repostItem = eventToPostItem(event);
+          // Busca o perfil do autor da postagem original (tag "p") para
+          // mostrar o nome real no cartão embutido do repost.
+          const originalAuthor = event.tags.find(t => t[0] === 'p')?.[1];
+          if (originalAuthor) ensureProfileLoaded(originalAuthor);
+          setPosts(prev => {
+            if (prev.some(p => p.id === event.id)) return prev;
+            return [repostItem, ...prev].sort((a, b) => b.created_at - a.created_at);
+          });
         } else if (event.kind === 1) {
           // Evento de Post ou Resposta/Comentário
           let displayContent = event.content;
@@ -1354,7 +1696,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // --- Métodos de Login / Conta ---
   const loginWithExtension = async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !window.nostr) {
-      alert('Nenhuma extensão Nostr (como Alby ou nos2x) foi encontrada no seu navegador.');
+      alert(t('noExtensionAlert'));
       return false;
     }
     try {
@@ -1453,24 +1795,26 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const logout = () => {
     const prevPubkey = auth.pubkey;
 
+    // Remove a assinatura de push do dispositivo para a conta que está saindo
+    try {
+      fetch('/api/push/unsubscribe', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pubkey: prevPubkey })
+      });
+    } catch {}
+
     setAuth({
       pubkey: '',
       npub: '',
       authMode: 'none'
     });
 
-    // Limpa o cache do storage ligado à conta para que outra conta não
-    // herde amigos, posts, grupos ou mensagens da conta anterior.
+    // Limpa todo o localStorage da página para que a próxima conta entre limpa,
+    // sem herdar amigos, posts, grupos, mensagens ou configurações da anterior.
     try {
-      localStorage.removeItem(LOCAL_STORAGE_AUTH);
-      localStorage.removeItem(LOCAL_STORAGE_OWN_PROFILE);
-      localStorage.removeItem('tribe_nostr_friends');
-      localStorage.removeItem('tribe_nostr_posts');
-      localStorage.removeItem(LOCAL_STORAGE_GROUPS);
-      if (prevPubkey) {
-        localStorage.removeItem(`tribe_nostr_joined_groups_${prevPubkey}`);
-        localStorage.removeItem(`tribe_nostr_left_groups_${prevPubkey}`);
-      }
+      localStorage.clear();
     } catch {}
 
     // Zera também o estado em memória para não vazar dados entre contas
@@ -1479,13 +1823,19 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setGroups([]);
     setProfiles({});
     setChats({});
-    setUnreadChats({});
+    setChatLoading(false);
     setLatestNotification(null);
+    setViewProfilePubkeyState(null);
+    setPushEnabled(false);
     setActiveChatPubkey(null);
     setSelectedGroupId(null);
     fetchedProfilesRef.current = new Set();
     interactionsRef.current = { likes: {}, reposts: {}, replies: {} };
     joinedIdsRef.current = new Set();
+    lastReadRef.current = {};
+    try {
+      if (prevPubkey) localStorage.removeItem(`tribe_nostr_lastread_${prevPubkey}`);
+    } catch {}
   };
 
   const updateProfile = async (profileData: Partial<UserProfile>): Promise<boolean> => {
@@ -1616,7 +1966,12 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           isReel
         };
 
-        setPosts(prev => [newPost, ...prev]);
+        setPosts(prev => {
+          // Deduplica pelo id para que um post criado nunca apareça duplicado
+          // (mesmo se for re-ingerido pelo relay na sequência).
+          const next = prev.filter(p => p.id !== newPost.id);
+          return [newPost, ...next].sort((a, b) => b.created_at - a.created_at);
+        });
         return true;
       }
     } catch (e) {
@@ -1663,16 +2018,23 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
+    // Mantém o contador consistente com o conjunto de reposters (Set),
+    // evitando contagem duplicada entre o otimista e o real.
+    const reps = interactionsRef.current.reposts[post.id] || (interactionsRef.current.reposts[post.id] = new Set());
+    reps.add(auth.pubkey);
+
     setPosts(prev => prev.map(p => {
       if (p.id === post.id) {
         return {
           ...p,
           userReposted: true,
-          repostsCount: p.repostsCount + 1
+          repostsCount: reps.size
         };
       }
       return p;
     }));
+
+    ensureProfileLoaded(post.pubkey);
 
     try {
       await client.signAndSendEvent({
@@ -1954,6 +2316,12 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }, auth.authMode, auth.secretKey);
 
       if (event) {
+        // "Acorda" o servidor (Wasmer hiberna quando ocioso) para que ele
+        // detecte a DM nos relays e entregue a notificação push ao destinatário.
+        try {
+          fetch('/api/push/ping', { method: 'POST', cache: 'no-store' });
+        } catch {}
+
         // Adiciona o amigo automaticamente à lista ao mandar mensagem
         addFriend(receiverPubkey);
 
@@ -2004,6 +2372,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         activeTab,
         setActiveTab,
 
+        viewProfilePubkey,
+        setViewProfilePubkey,
+
         selectedGroupId,
         setSelectedGroupId,
 
@@ -2013,6 +2384,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         repostPost,
         commentPost,
         deletePost,
+        loadNote,
 
         groups,
         createGroup,
@@ -2032,12 +2404,15 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         chats,
         activeChatPubkey: activeChatPubkeyState,
         setActiveChatPubkey,
+        chatLoading,
         sendDirectMessage,
 
         unreadChats,
         totalUnreadMessages,
         latestNotification,
         clearNotification,
+        requestNotificationPermission,
+        pushEnabled,
 
         profiles,
         getProfile,

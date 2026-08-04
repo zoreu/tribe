@@ -1,5 +1,6 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { uploadMediaToNostrBuild } from '../../lib/nostr/media';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
 import { 
@@ -30,6 +31,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   defaultIsReel 
 }) => {
   const { createPost, groups, auth, setShowAuthModal } = useNostr();
+  const { t } = useLanguage();
 
   const [content, setContent] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string>(defaultGroupId || '');
@@ -41,6 +43,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   const [publishing, setPublishing] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Trava síncrona contra clique duplo no botão Publicar (evita postar duas vezes)
+  const submittingRef = useRef(false);
 
   // Ao abrir o modal (ou quando o grupo/reel padrão muda), re-sincroniza o
   // destino da postagem. Sem isso, o componente (que permanece montado mesmo
@@ -79,8 +83,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     setMediaUrls(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Proteção contra clique duplo: ignora cliques enquanto já está publicando
+    if (submittingRef.current) return;
     if (!content.trim() && mediaUrls.length === 0) return;
 
     if (!auth.pubkey) {
@@ -89,19 +95,24 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     }
 
     setPublishing(true);
-    const success = await createPost(
-      content, 
-      mediaUrls, 
-      selectedGroupId || undefined, 
-      isReel, 
-      isEncrypted
-    );
-    setPublishing(false);
+    submittingRef.current = true;
+    try {
+      const success = await createPost(
+        content,
+        mediaUrls,
+        selectedGroupId || undefined,
+        isReel,
+        isEncrypted
+      );
 
-    if (success) {
-      setContent('');
-      setMediaUrls([]);
-      onClose();
+      if (success) {
+        setContent('');
+        setMediaUrls([]);
+        onClose();
+      }
+    } finally {
+      submittingRef.current = false;
+      setPublishing(false);
     }
   };
 
@@ -113,7 +124,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <h3 className="font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-blue-600" />
-            Criar Publicação
+            {t('createPostTitle')}
           </h3>
           <button 
             onClick={onClose}
@@ -138,7 +149,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               }`}
             >
               <Globe className="w-3.5 h-3.5" />
-              Feed Público
+              {t('publicFeed')}
             </button>
 
             {/* Selector de Grupo */}
@@ -147,9 +158,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               onChange={(e) => { setSelectedGroupId(e.target.value); setIsReel(false); }}
               className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-1.5 rounded-full border-none focus:ring-2 focus:ring-blue-500 text-xs font-bold"
             >
-              <option value="">-- Postar em Grupo --</option>
+              <option value="">{t('postInGroupOption')}</option>
               {groups.map(g => (
-                <option key={g.id} value={g.id}>Grupo: {g.name}</option>
+                <option key={g.id} value={g.id}>{t('groupLabel')}: {g.name}</option>
               ))}
             </select>
 
@@ -163,18 +174,22 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               }`}
             >
               <Film className="w-3.5 h-3.5" />
-              Reel / Vídeo Curto
+              {t('reelShort')}
             </button>
           </div>
 
           {/* Área de Texto */}
           <textarea
             rows={4}
-            placeholder="No que você está pensando? Compartilhe seus pensamentos livres no Tribe..."
+            placeholder={t('textPlaceholder')}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-slate-900 dark:text-white resize-none"
           />
+
+          <p className="text-[10px] text-slate-400 font-semibold">
+            {t('tipCopyId')}
+          </p>
 
           {/* Pré-visualização de Mídias anexadas */}
           {mediaUrls.length > 0 && (
@@ -209,8 +224,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             <div className="flex items-center gap-2">
               <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <div>
-                <h4 className="font-bold text-xs text-amber-900 dark:text-amber-200">Criptografia Anti-Censura no Cliente</h4>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">Protege a postagem para evitar moderação ou remoção por relays externos.</p>
+                <h4 className="font-bold text-xs text-amber-900 dark:text-amber-200">{t('antiCensorshipClient')}</h4>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">{t('anticensDesc')}</p>
               </div>
             </div>
             <input
@@ -259,7 +274,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 title="Anexar Foto, Vídeo ou Áudio"
               >
                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Image className="w-4 h-4" />}
-                <span>Foto/Mídia</span>
+                <span>{t('photoMedia')}</span>
               </button>
             </div>
 
@@ -276,7 +291,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>Publicar</span>
+                  <span>{t('publish')}</span>
                 </>
               )}
             </button>
@@ -287,3 +302,4 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     </div>
   );
 };
+

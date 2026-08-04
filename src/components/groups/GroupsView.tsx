@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   Users as GroupIcon, 
   PlusCircle, 
@@ -40,6 +41,7 @@ export const GroupsView: React.FC = () => {
     client,
     deepLink
   } = useNostr();
+  const { t } = useLanguage();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPostModal, setShowPostModal] = useState(false);
@@ -179,7 +181,7 @@ export const GroupsView: React.FC = () => {
             <GroupIcon className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="font-extrabold text-lg text-slate-900 dark:text-white">Grupos & Comunidades</h2>
+            <h2 className="font-extrabold text-lg text-slate-900 dark:text-white">{t('groupsCommunities')}</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">Redes comunitárias moderadas de forma descentralizada</p>
           </div>
         </div>
@@ -189,7 +191,7 @@ export const GroupsView: React.FC = () => {
           className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
         >
           <PlusCircle className="w-4 h-4" />
-          <span>Criar Novo Grupo</span>
+          <span>{t('createNewGroup')}</span>
         </button>
       </div>
 
@@ -274,7 +276,7 @@ export const GroupsView: React.FC = () => {
                   title="Entrar novamente no grupo"
                 >
                   <GroupIcon className="w-3.5 h-3.5" />
-                  <span>Entrar de novo</span>
+                  <span>{t('joinAgain')}</span>
                 </button>
               </div>
             ))}
@@ -286,7 +288,7 @@ export const GroupsView: React.FC = () => {
       {groups.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
           <GroupIcon className="w-12 h-12 text-emerald-500 mx-auto" />
-          <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">Nenhum Grupo Criado Ainda</h3>
+          <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">{t('noGroupYet')}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
             A plataforma está totalmente limpa. Seja o primeiro a inaugurar uma comunidade ou grupo moderado descentralizado no Tribe!
           </p>
@@ -295,7 +297,7 @@ export const GroupsView: React.FC = () => {
             className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-lg transition-all inline-flex items-center gap-2"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Criar Primeira Comunidade</span>
+            <span>{t('createFirstCommunity')}</span>
           </button>
         </div>
       ) : activeGroup && (
@@ -321,12 +323,12 @@ export const GroupsView: React.FC = () => {
                 <h3 className="font-extrabold text-xl text-slate-900 dark:text-white">{activeGroup.name}</h3>
                 {isJoined && (
                   <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Você é Membro
+                    <Check className="w-3 h-3" /> {t('youAreMember')}
                   </span>
                 )}
                 {isModerator && (
                   <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" /> Você é Moderador
+                    <ShieldCheck className="w-3 h-3" /> {t('youAreModerator')}
                   </span>
                 )}
               </div>
@@ -335,7 +337,7 @@ export const GroupsView: React.FC = () => {
                 <div className="flex items-center gap-1.5 flex-wrap pt-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                    Moderadores:
+                    {t('moderators')}:
                   </span>
                   {activeGroup.moderators.map(pk => {
                     const mod = getProfile(pk);
@@ -359,7 +361,7 @@ export const GroupsView: React.FC = () => {
             <div className="mx-6 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
               <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
                 <Info className="w-4 h-4 text-emerald-500" />
-                <span>Regras de Convivência da Comunidade</span>
+                <span>{t('communityRules')}</span>
               </div>
               <ul className="space-y-1 text-slate-600 dark:text-slate-400 pl-5 list-disc">
                 {activeGroup.rules.map((rule, idx) => (
@@ -381,17 +383,17 @@ export const GroupsView: React.FC = () => {
                       title="Editar grupo e gerenciar moderadores"
                     >
                       <Pencil className="w-3.5 h-3.5" />
-                      <span>Editar</span>
+                      <span>{t('edit')}</span>
                     </button>
                   )}
 
                   <button
                     onClick={handleShareGroup}
                     className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5"
-                    title="Compartilhar Link do Grupo"
+                    title={t('shareGroupLink')}
                   >
                     {copiedLink ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
-                    <span>{copiedLink ? 'Copiado' : 'Compartilhar'}</span>
+                    <span>{copiedLink ? t('copied') : t('share')}</span>
                   </button>
 
                   {!isCreator && (
@@ -401,7 +403,7 @@ export const GroupsView: React.FC = () => {
                       title="Sair do grupo"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      <span>Sair</span>
+                      <span>{t('exit')}</span>
                     </button>
                   )}
 
@@ -410,7 +412,7 @@ export const GroupsView: React.FC = () => {
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all inline-flex items-center gap-1.5"
                   >
                     <PlusCircle className="w-4 h-4" />
-                    <span>Postar no Grupo</span>
+                    <span>{t('postInGroup')}</span>
                   </button>
                 </>
               ) : (
@@ -421,16 +423,16 @@ export const GroupsView: React.FC = () => {
                     title="Entrar neste grupo"
                   >
                     <PlusCircle className="w-4 h-4" />
-                    <span>Participar</span>
+                    <span>{t('joinGroup')}</span>
                   </button>
 
                   <button
                     onClick={handleShareGroup}
                     className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5"
-                    title="Compartilhar Link do Grupo"
+                    title={t('shareGroupLink')}
                   >
                     {copiedLink ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
-                    <span>{copiedLink ? 'Copiado' : 'Compartilhar'}</span>
+                    <span>{copiedLink ? t('copied') : t('share')}</span>
                   </button>
                 </>
               )}
@@ -440,7 +442,7 @@ export const GroupsView: React.FC = () => {
           {/* Feed de Posts do Grupo */}
           <div className="p-6 pt-2 space-y-4">
             <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-              Publicações no Grupo ({groupPosts.length})
+              {t('groupPostsLabel')} ({groupPosts.length})
             </h4>
 
             {groupPosts.length === 0 ? (
@@ -462,10 +464,10 @@ export const GroupsView: React.FC = () => {
                       <button
                         onClick={() => deleteGroupPostModeration(activeGroup.id, post.id)}
                         className="absolute top-4 right-4 p-2 bg-red-600 text-white rounded-xl shadow-lg hover:bg-red-700 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-bold z-20"
-                        title="Moderação: Remover do grupo"
+                        title={t('modRemoveTip')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Remover (Mod)</span>
+                        <span>{t('removeMod')}</span>
                       </button>
                     )}
                   </div>
@@ -482,12 +484,12 @@ export const GroupsView: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-              <h3 className="font-extrabold text-base text-slate-900 dark:text-white">Criar Novo Grupo Tribe</h3>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white">{t('createNewGroupTribe')}</h3>
               <button onClick={() => setShowCreateModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={handleCreateGroupSubmit} className="p-4 space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Nome do Grupo:</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupName')}</label>
                 <input
                   type="text"
                   placeholder="Ex: Cripto & Liberdade"
@@ -498,7 +500,7 @@ export const GroupsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Descrição:</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupDescription')}</label>
                 <textarea
                   rows={3}
                   placeholder="Do que se trata o seu grupo..."
@@ -509,7 +511,7 @@ export const GroupsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">URL da Foto do Grupo (Opcional):</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupPhotoUrl')}</label>
                 <input
                   type="url"
                   placeholder="https://..."
@@ -519,7 +521,7 @@ export const GroupsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">URL da Capa do Banner (Opcional):</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupBannerUrl')}</label>
                 <input
                   type="url"
                   placeholder="https://..."
@@ -555,7 +557,7 @@ export const GroupsView: React.FC = () => {
               {/* Dados do Grupo */}
               <form onSubmit={handleSaveGroup} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">Nome do Grupo:</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupName')}</label>
                   <input
                     type="text"
                     placeholder="Ex: Cripto & Liberdade"
@@ -566,7 +568,7 @@ export const GroupsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">Descrição:</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupDescription')}</label>
                   <textarea
                     rows={3}
                     placeholder="Do que se trata o seu grupo..."
@@ -577,7 +579,7 @@ export const GroupsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">URL da Foto do Grupo:</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupPhotoUrl')}</label>
                   <input
                     type="url"
                     placeholder="https://..."
@@ -587,7 +589,7 @@ export const GroupsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">URL da Capa do Banner:</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">{t('groupBannerUrl')}</label>
                   <input
                     type="url"
                     placeholder="https://..."
@@ -662,7 +664,7 @@ export const GroupsView: React.FC = () => {
                     className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1"
                   >
                     <UserPlus className="w-4 h-4" />
-                    <span>Adicionar</span>
+                    <span>{t('add')}</span>
                   </button>
                 </div>
               </div>

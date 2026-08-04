@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import { useNostr } from '../../context/NostrContext';
 import { 
   Users, 
@@ -15,6 +16,7 @@ import {
 import { uploadMediaToNostrBuild, extractMediaUrls } from '../../lib/nostr/media';
 import { linkifyText } from '../../lib/nostr/text';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
+import { AutoTranslated } from '../shared/AutoTranslated';
 
 export const ChatView: React.FC = () => {
   const { 
@@ -29,8 +31,10 @@ export const ChatView: React.FC = () => {
     friends,
     addFriend,
     removeFriend,
-    unreadChats
+    unreadChats,
+    chatLoading
   } = useNostr();
+  const { t } = useLanguage();
 
   const [newFriendNpub, setNewFriendNpub] = useState('');
   const [messageText, setMessageText] = useState('');
@@ -240,7 +244,7 @@ export const ChatView: React.FC = () => {
                   className="px-3 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
                 >
                   <UserX className="w-3.5 h-3.5" />
-                  <span>Remover</span>
+                  <span>{t('remove')}</span>
                 </button>
                 <div className="hidden sm:flex px-3 py-1 bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-bold items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4" />
@@ -251,7 +255,12 @@ export const ChatView: React.FC = () => {
 
             {/* Stream de Mensagens */}
             <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-slate-100/50 dark:bg-slate-900/40">
-              {currentMessages.length === 0 ? (
+              {chatLoading && currentMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-2 text-slate-500 dark:text-slate-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                  <p className="text-xs font-bold">Carregando mensagens...</p>
+                </div>
+              ) : currentMessages.length === 0 ? (
                 <div className="text-center py-12 space-y-2">
                   <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
                     <Lock className="w-6 h-6" />
@@ -278,7 +287,7 @@ export const ChatView: React.FC = () => {
                       }`}>
                         {messageText && (
                           <p className="leading-relaxed whitespace-pre-wrap break-words">
-                            {linkifyText(messageText, isMe ? 'onBlue' : 'default')}
+                            <AutoTranslated text={messageText} variant={isMe ? 'onBlue' : 'default'} />
                           </p>
                         )}
                         {media.length > 0 && media.map((m, idx) => (
@@ -354,7 +363,7 @@ export const ChatView: React.FC = () => {
                 className="py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1 disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
-                <span className="hidden sm:inline">Enviar</span>
+                <span className="hidden sm:inline">{t('send')}</span>
               </button>
             </form>
 

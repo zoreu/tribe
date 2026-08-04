@@ -62,6 +62,9 @@ export interface PostItem {
   isEncrypted: boolean;
   groupId?: string;
   isReel?: boolean;
+
+  // Repost (NIP-18 kind 6): a postagem original embutida (estilo Twitter)
+  repostOf?: PostItem;
 }
 
 export interface ChatMessage {

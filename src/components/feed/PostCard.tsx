@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { PostItem } from '../../types';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { linkifyText } from '../../lib/nostr/text';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
+import { AutoTranslated } from '../shared/AutoTranslated';
+import * as nip19 from 'nostr-tools/nip19';
 import { 
   Heart, 
   Repeat, 
@@ -14,7 +17,8 @@ import {
   Film, 
   Check, 
   Send,
-  ShieldCheck
+  ShieldCheck,
+  Link2
 } from 'lucide-react';
 
 interface PostCardProps {
@@ -22,15 +26,23 @@ interface PostCardProps {
 }
 
 export const PostCard: React.FC<PostCardProps> = ({ post }) => {
-  const { likePost, repostPost, commentPost, deletePost, auth, getShareableUrl, groups, client, isFriend, addFriend, getProfile } = useNostr();
+  const { likePost, repostPost, commentPost, deletePost, auth, getShareableUrl, groups, client, isFriend, addFriend, getProfile, setViewProfilePubkey } = useNostr();
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [localComments, setLocalComments] = useState<Array<{ id: string; authorName: string; text: string; time: string }>>([]);
   const [displayText, setDisplayText] = useState<string>(post.content);
 
   const authorProfile = getProfile(post.pubkey) || post.author;
-  const relayReplies = post.replies || [];
+
+  // Estilo Twitter: um repost (kind 6) é exibido como postagem do reposter,
+  // com a postagem original embutida (nome/autor do original).
+  const isRepost = !!post.repostOf;
+  const displayPost = isRepost ? post.repostOf! : post;
+  const originalProfile = isRepost ? (getProfile(displayPost.pubkey) || displayPost.author) : null;
+  const relayReplies = displayPost.replies || [];
 
   useEffect(() => {
     const isEncrypted = post.content.startsWith('tribee2e:') || post.content.includes('?iv=');
@@ -51,13 +63,28 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
   const isAuthor = auth.pubkey === post.pubkey;
   const group = post.groupId ? groups.find(g => g.id === post.groupId) : null;
-  const totalComments = (relayReplies.length > 0 ? relayReplies.length : post.repliesCount || 0) + localComments.length;
+  const totalComments = (relayReplies.length > 0 ? relayReplies.length : displayPost.repliesCount || 0) + localComments.length;
 
   const handleShare = () => {
-    const shareUrl = getShareableUrl('note', post.id);
+    const shareUrl = getShareableUrl('note', displayPost.id);
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Copia o identificador nostr:nevent da postagem para colar em outra
+  // postagem e referenciá-la (fica embutida como um repost/citação).
+  const handleCopyId = () => {
+    try {
+      const nevent = nip19.neventEncode({
+        id: displayPost.id,
+        relays: [],
+        author: displayPost.pubkey
+      });
+      navigator.clipboard.writeText(`nostr:${nevent}`);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch {}
   };
 
   const handleAddComment = async (e: React.FormEvent) => {
@@ -70,7 +97,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
       ...prev,
       {
         id: optimisticId,
-        authorName: auth.profile?.name || 'Você',
+        authorName: auth.profile?.name || t('you'),
         text,
         time: 'Agora'
       }
@@ -78,7 +105,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
     setCommentText('');
 
     // Publica o comentário nos relays como evento Kind 1 com tag "e" do post original
-    await commentPost(post.id, text, post.pubkey);
+    await commentPost(displayPost.id, text, displayPost.pubkey);
     // O comentário já aparece em post.replies; remove o otimista local para não duplicar
     setLocalComments(prev => prev.filter(c => c.id !== optimisticId));
   };
@@ -94,9 +121,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         <div className="bg-slate-50 dark:bg-slate-900/50 px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-bold text-slate-500">
           <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
             <GroupIcon className="w-4 h-4" />
-            <span>Grupo: {group.name}</span>
+            <span>{t('groupLabel')}: {group.name}</span>
           </div>
-          <span className="text-[10px] text-slate-400">Moderado pela Comunidade</span>
+          <span className="text-[10px] text-slate-400">{t('moderatedByCommunity')}</span>
         </div>
       )}
 
@@ -106,26 +133,38 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         {/* Cabeçalho do Autor */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <img
-              src={authorProfile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'}
-              alt={authorProfile?.name}
-              className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-            />
+            <button
+              onClick={() => setViewProfilePubkey(post.pubkey)}
+              className="shrink-0"
+              title="Ver perfil"
+            >
+              <img
+                src={authorProfile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'}
+                alt={authorProfile?.name}
+                className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-slate-700 hover:ring-2 hover:ring-blue-400 transition-shadow"
+              />
+            </button>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-extrabold text-base text-slate-900 dark:text-white leading-snug">
-                  {authorProfile?.display_name || authorProfile?.name || `Usuário ${post.pubkey.slice(0, 8)}`}
-                </h4>
+                <button
+                  onClick={() => setViewProfilePubkey(post.pubkey)}
+                  className="text-left hover:underline"
+                  title="Ver perfil"
+                >
+                  <h4 className="font-extrabold text-base text-slate-900 dark:text-white leading-snug">
+                    {authorProfile?.display_name || authorProfile?.name || `Usuário ${post.pubkey.slice(0, 8)}`}
+                  </h4>
+                </button>
 
                 {isAuthor && (
                   <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800 px-2 py-0.5 rounded-full font-bold shrink-0">
-                    Você
+                    {t('you')}
                   </span>
                 )}
 
                 {!isAuthor && isFriend(post.pubkey) && (
                   <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shrink-0">
-                    👥 Amigo
+                    👥 {t('friend')}
                   </span>
                 )}
 
@@ -133,9 +172,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
                   <button
                     onClick={() => addFriend(post.pubkey)}
                     className="text-[10px] bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800 px-2 py-0.5 rounded-full font-bold transition-colors shrink-0"
-                    title="Adicionar autor aos meus amigos"
+                    title={t('addFriendTip')}
                   >
-                    + Adicionar Amigo
+                    + {t('addFriend')}
                   </button>
                 )}
 
@@ -161,58 +200,125 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
             <button
               onClick={() => deletePost(post.id)}
               className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors shrink-0"
-              title="Excluir postagem (NIP-09 Event)"
+              title={t('deletePostTip')}
             >
               <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {/* Texto da Postagem */}
-        <p className="text-base text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words pt-1">
-          {linkifyText(displayText)}
-        </p>
+        {isRepost ? (
+          <>
+            {/* Indicador de Repost (estilo Twitter) */}
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 pb-1">
+              <Repeat className="w-4 h-4 text-emerald-500" />
+              <span>{authorProfile?.display_name || authorProfile?.name || 'Este usuário'} repostou</span>
+            </div>
 
-        {/* Criptografia Badge */}
-        {post.isEncrypted && (
-          <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300">
-            <Lock className="w-4 h-4 text-amber-600" />
-            <span>Conteúdo Protegido por Criptografia de Ponta a Ponta</span>
-          </div>
-        )}
-
-        {/* Galeria de Mídias (Fotos, Vídeos, Áudio) */}
-        {post.media && post.media.length > 0 && (
-          <div className="space-y-2 pt-1">
-            {post.media.map((item, index) => (
-              <div key={index} className="rounded-xl overflow-hidden bg-black/5 dark:bg-black/30 border border-slate-200 dark:border-slate-700">
-                {item.type === 'video' ? (
-                  <video
-                    src={item.url}
-                    controls
-                    className="w-full max-h-[450px] object-contain mx-auto"
-                  />
-                ) : item.type === 'audio' ? (
-                  <audio
-                    src={item.url}
-                    controls
-                    className="w-full my-3 px-3"
-                  />
-                ) : item.type === 'file' ? (
-                  <div className="p-2">
-                    <FileAttachmentCard url={item.url} />
-                  </div>
-                ) : (
+            {/* Postagem original embutida */}
+            <div
+              onClick={() => { window.location.href = `/?note=${displayPost.id}`; }}
+              className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50/70 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-900/70 transition-colors cursor-pointer"
+            >
+<div className="p-4 space-y-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setViewProfilePubkey(displayPost.pubkey);
+                  }}
+                  className="flex items-center gap-2.5 min-w-0 hover:underline text-left"
+                  title="Ver perfil"
+                >
                   <img
-                    src={item.url}
-                    alt={item.alt || 'Mídia da postagem'}
-                    className="w-full max-h-[500px] object-cover hover:scale-[1.01] transition-transform"
-                    loading="lazy"
+                    src={originalProfile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
+                    alt={originalProfile?.name}
+                    className="w-9 h-9 rounded-full object-cover shrink-0"
                   />
+                  <div className="min-w-0">
+                    <h5 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                      {originalProfile?.display_name || originalProfile?.name || `Usuário ${displayPost.pubkey.slice(0, 8)}`}
+                    </h5>
+                    <p className="text-[10px] text-slate-400">
+                      {new Date(displayPost.created_at * 1000).toLocaleString()}
+                    </p>
+                  </div>
+                </button>
+
+                {displayPost.content && (
+                  <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words">
+                    <AutoTranslated text={displayPost.content} />
+                  </p>
+                )}
+
+                {displayPost.media && displayPost.media.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    {displayPost.media.map((item, index) => (
+                      <div key={index} className="rounded-xl overflow-hidden bg-black/5 dark:bg-black/30 border border-slate-200 dark:border-slate-700">
+                        {item.type === 'video' ? (
+                          <video src={item.url} controls className="w-full max-h-[300px] object-contain mx-auto" />
+                        ) : item.type === 'audio' ? (
+                          <audio src={item.url} controls className="w-full my-2 px-2" />
+                        ) : item.type === 'file' ? (
+                          <div className="p-2"><FileAttachmentCard url={item.url} /></div>
+                        ) : (
+                          <img src={item.url} alt={item.alt || ''} className="w-full max-h-[320px] object-cover" loading="lazy" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Texto da Postagem */}
+            <p className="text-base text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words pt-1">
+              <AutoTranslated text={displayText} />
+            </p>
+
+            {/* Criptografia Badge */}
+            {post.isEncrypted && (
+              <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                <Lock className="w-4 h-4 text-amber-600" />
+                <span>{t('e2eeContent')}</span>
+              </div>
+            )}
+
+            {/* Galeria de Mídias (Fotos, Vídeos, Áudio) */}
+            {post.media && post.media.length > 0 && (
+              <div className="space-y-2 pt-1">
+                {post.media.map((item, index) => (
+                  <div key={index} className="rounded-xl overflow-hidden bg-black/5 dark:bg-black/30 border border-slate-200 dark:border-slate-700">
+                    {item.type === 'video' ? (
+                      <video
+                        src={item.url}
+                        controls
+                        className="w-full max-h-[450px] object-contain mx-auto"
+                      />
+                    ) : item.type === 'audio' ? (
+                      <audio
+                        src={item.url}
+                        controls
+                        className="w-full my-3 px-3"
+                      />
+                    ) : item.type === 'file' ? (
+                      <div className="p-2">
+                        <FileAttachmentCard url={item.url} />
+                      </div>
+                    ) : (
+                      <img
+                        src={item.url}
+                        alt={item.alt || 'Mídia da postagem'}
+                        className="w-full max-h-[500px] object-cover hover:scale-[1.01] transition-transform"
+                        loading="lazy"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Barra de Ações (Likes, Reposts, Comentários, Compartilhar) */}
@@ -220,28 +326,38 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
           
           {/* Curtir */}
           <button
-            onClick={() => likePost(post)}
+            onClick={() => likePost(displayPost)}
             className={`flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-colors ${
-              post.userLiked 
+              displayPost.userLiked 
                 ? 'text-red-500 bg-red-50 dark:bg-red-950/30' 
                 : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-red-500'
             }`}
           >
-            <Heart className={`w-4 h-4 ${post.userLiked ? 'fill-red-500' : ''}`} />
-            <span>{post.likesCount > 0 ? post.likesCount : 'Curtir'}</span>
+            <Heart className={`w-4 h-4 ${displayPost.userLiked ? 'fill-red-500' : ''}`} />
+            <span>{displayPost.likesCount > 0 ? displayPost.likesCount : t('like')}</span>
+          </button>
+
+          {/* Copiar ID (nostr:nevent) para referenciar em outra postagem */}
+          <button
+            onClick={handleCopyId}
+            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-amber-500 transition-colors"
+            title="Copiar identificador nostr:nevent para colar em outra postagem"
+          >
+            {copiedId ? <Check className="w-4 h-4 text-emerald-500" /> : <Link2 className="w-4 h-4" />}
+            <span>{copiedId ? 'Copiado!' : t('copyId')}</span>
           </button>
 
           {/* Repostar */}
           <button
-            onClick={() => repostPost(post)}
+            onClick={() => repostPost(displayPost)}
             className={`flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-colors ${
-              post.userReposted 
+              displayPost.userReposted 
                 ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' 
                 : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-emerald-500'
             }`}
           >
             <Repeat className="w-4 h-4" />
-            <span>{post.repostsCount > 0 ? post.repostsCount : 'Repost'}</span>
+            <span>{displayPost.repostsCount > 0 ? displayPost.repostsCount : t('repost')}</span>
           </button>
 
           {/* Comentar */}
@@ -250,17 +366,17 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
             className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-blue-500 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
-            <span>{totalComments > 0 ? totalComments : 'Comentar'}</span>
+            <span>{totalComments > 0 ? totalComments : t('comment')}</span>
           </button>
 
           {/* Compartilhar Deep Link */}
           <button
             onClick={handleShare}
             className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-indigo-500 transition-colors"
-            title="Copiar link com parâmetros na URL"
+            title={t('copyLinkTip')}
           >
             {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
-            <span>{copied ? 'Copiado!' : 'Compartilhar'}</span>
+            <span>{copied ? 'Copiado!' : t('share')}</span>
           </button>
         </div>
 
@@ -316,3 +432,4 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
     </article>
   );
 };
+

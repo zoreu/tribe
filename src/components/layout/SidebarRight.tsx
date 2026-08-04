@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import { useNostr } from '../../context/NostrContext';
 import { UserProfile } from '../../types';
 import { Radio, UserPlus, Check, Copy, ExternalLink, Activity, ShieldAlert, Users } from 'lucide-react';
@@ -9,6 +10,7 @@ interface SidebarRightProps {
 
 export const SidebarRight: React.FC<SidebarRightProps> = ({ onOpenRelaysModal }) => {
   const { relays, profiles, addFriend, isFriend } = useNostr();
+  const { t } = useLanguage();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const activeProfiles: UserProfile[] = Object.values(profiles);
@@ -27,13 +29,13 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({ onOpenRelaysModal })
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Rede de Relays</h3>
+            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{t('relayNetwork')}</h3>
           </div>
           <button 
             onClick={onOpenRelaysModal}
             className="text-xs font-bold text-blue-600 hover:underline"
           >
-            Gerenciar
+            {t('manage')}
           </button>
         </div>
 
@@ -57,7 +59,7 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({ onOpenRelaysModal })
 
       {/* Sugestões de Contatos / Quem Seguir */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
-        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">Pessoas no Nostr</h3>
+        <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{t('peopleOnNostr')}</h3>
 
         {activeProfiles.length === 0 ? (
           <div className="p-4 text-center text-slate-400 space-y-1 bg-slate-50 dark:bg-slate-900/40 rounded-xl">
@@ -115,11 +117,12 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({ onOpenRelaysModal })
       <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-2 text-slate-600 dark:text-slate-400">
         <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
           <Activity className="w-4 h-4 text-blue-500" />
-          <span>Protocolo Nostr NIPs Suportados</span>
+          <span>{t('nipsSupported')}</span>
         </div>
-        <p>Suporta NIP-01 (Mensagens Básicas), NIP-04/NIP-44 (Chat Criptografado E2EE), NIP-07 (Extensão), NIP-09 (Exclusão Kind 5), NIP-18 (Repost) e NIP-25 (Reações).</p>
+        <p>{t('nipsList')}</p>
       </div>
 
     </aside>
   );
 };
+

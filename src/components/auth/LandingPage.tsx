@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNostr } from '../../context/NostrContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { ShieldCheck, Sparkles, Key, PlusCircle, Lock, Radio, Copy, Check, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
   const { loginWithExtension, loginWithNsec, createAccount } = useNostr();
+  const { t } = useLanguage();
 
   const [nsecInput, setNsecInput] = useState('');
   const [showNsecInput, setShowNsecInput] = useState(false);
@@ -22,7 +24,7 @@ export const LandingPage: React.FC = () => {
     const ok = await loginWithExtension();
     setLoading(false);
     if (!ok) {
-      setErrorMessage('Extensão Nostr não detectada. Instale a extensão Alby ou nos2x, ou entre usando sua chave privada (nsec).');
+      setErrorMessage(t('extensionNotDetected'));
     }
   };
 
@@ -77,26 +79,26 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <p className="text-xl lg:text-2xl font-medium text-slate-700 dark:text-slate-300 leading-snug">
-            O Tribe ajuda você a se conectar e compartilhar com as pessoas que fazem parte da sua vida através de uma rede livre e descentralizada.
+            {t('heroText')}
           </p>
 
           <div className="pt-4 hidden sm:grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
             <div className="p-3 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800 backdrop-blur-sm">
               <ShieldCheck className="w-5 h-5 text-blue-600 mb-1" />
-              <h4 className="font-bold text-xs text-slate-900 dark:text-white">Sem Senhas Centralizadas</h4>
-              <p className="text-[11px] text-slate-500">Sua chave é única e pertence apenas a você.</p>
+              <h4 className="font-bold text-xs text-slate-900 dark:text-white">{t('noCentralPasswords')}</h4>
+              <p className="text-[11px] text-slate-500">{t('yourKeyUnique')}</p>
             </div>
 
             <div className="p-3 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800 backdrop-blur-sm">
               <Radio className="w-5 h-5 text-indigo-600 mb-1" />
-              <h4 className="font-bold text-xs text-slate-900 dark:text-white">Zero Censura</h4>
-              <p className="text-[11px] text-slate-500">Multi-relays distribuídos no protocolo Nostr.</p>
+              <h4 className="font-bold text-xs text-slate-900 dark:text-white">{t('zeroCensorship')}</h4>
+              <p className="text-[11px] text-slate-500">{t('multiRelays')}</p>
             </div>
 
             <div className="p-3 bg-white/60 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800 backdrop-blur-sm">
               <Lock className="w-5 h-5 text-emerald-600 mb-1" />
-              <h4 className="font-bold text-xs text-slate-900 dark:text-white">Privacidade E2EE</h4>
-              <p className="text-[11px] text-slate-500">Mensagens privadas criptografadas de ponta a ponta.</p>
+              <h4 className="font-bold text-xs text-slate-900 dark:text-white">{t('e2eePrivacy')}</h4>
+              <p className="text-[11px] text-slate-500">{t('e2eeMessages')}</p>
             </div>
           </div>
         </div>
@@ -106,7 +108,7 @@ export const LandingPage: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 relative">
             
             <div className="text-center pb-2 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Entrar no Tribe</h2>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('loginTribe')}</h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">Escolha como deseja se conectar à sua conta Nostr</p>
             </div>
 
@@ -123,7 +125,7 @@ export const LandingPage: React.FC = () => {
               className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-600/25 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
             >
               <Sparkles className="w-5 h-5 text-blue-200 group-hover:rotate-12 transition-transform" />
-              <span>Entrar com Extensão Nostr (Alby / nos2x)</span>
+              <span>{t('loginExtension')}</span>
             </button>
 
             {/* Divider */}
@@ -146,7 +148,7 @@ export const LandingPage: React.FC = () => {
             ) : (
               <form onSubmit={handleNsecSubmit} className="space-y-3 bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 animate-in fade-in">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Sua Chave Privada (nsec)</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">{t('yourPrivateKey')}</label>
                   <button
                     type="button"
                     onClick={() => setShowPasswordText(!showPasswordText)}
@@ -196,7 +198,7 @@ export const LandingPage: React.FC = () => {
                 className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-md transition-all inline-flex items-center gap-2"
               >
                 <PlusCircle className="w-5 h-5" />
-                <span>Criar nova conta no Tribe</span>
+                <span>{t('createNewAccountTribe')}</span>
               </button>
             </div>
 
@@ -204,7 +206,7 @@ export const LandingPage: React.FC = () => {
 
           {/* Subtext explicativo */}
           <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-4 leading-relaxed">
-            <strong className="text-slate-700 dark:text-slate-300">Crie uma conta em 1 clique</strong> ou use sua chave para garantir o controle absoluto dos seus dados no ecossistema Nostr.
+            <strong className="text-slate-700 dark:text-slate-300">{t('createOneClick')}</strong> {t('orUseYourKey')}
           </p>
         </div>
 
@@ -219,14 +221,14 @@ export const LandingPage: React.FC = () => {
             </div>
 
             <div className="text-center space-y-1">
-              <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">Sua Conta Foi Criada!</h3>
+              <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">{t('accountCreated')}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Guarde sua chave privada em um local seguro. Ela é a única senha da sua conta e não pode ser recuperada se for perdida.
+                {t('keepKeySafe')}
               </p>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Sua Chave Privada (nsec)</label>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">{t('yourPrivateKey')}</label>
               <div className="font-mono text-xs bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-amber-600 dark:text-amber-400 break-all">
                 {createdKeys.nsec}
               </div>
@@ -236,12 +238,12 @@ export const LandingPage: React.FC = () => {
                 className="w-full py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Chave Copiada com Sucesso!' : 'Copiar Chave Privada (nsec)'}</span>
+                <span>{copied ? t('keyCopied') : t('copyPrivateKey')}</span>
               </button>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Sua Chave Pública (npub)</label>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">{t('yourPublicKey')}</label>
               <div className="font-mono text-xs bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 break-all">
                 {createdKeys.npub}
               </div>
@@ -251,7 +253,7 @@ export const LandingPage: React.FC = () => {
                 className="w-full py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors"
               >
                 {copiedNpub ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedNpub ? 'Chave Pública Copiada!' : 'Copiar Chave Pública (npub)'}</span>
+                <span>{copiedNpub ? t('publicKeyCopied') : t('copyPublicKey')}</span>
               </button>
             </div>
 
@@ -262,7 +264,7 @@ export const LandingPage: React.FC = () => {
               }}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-lg transition-colors"
             >
-              Entrar Agora no Tribe
+              {t('enterNow')}
             </button>
           </div>
         </div>
@@ -280,13 +282,13 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center sm:justify-start text-[11px] text-slate-400">
-            <span>Protocolo Nostr</span>
-            <span>Relays WebSocket</span>
-            <span>Extensão NIP-07</span>
-            <span>Criptografia NIP-04/NIP-44</span>
-            <span>Open Source</span>
-            <span>Desenvolvedores</span>
-            <span>Tribe Social © 2026</span>
+            <span>{t('protocolNostr')}</span>
+            <span>{t('relaysWebSocket')}</span>
+            <span>{t('nip07Ext')}</span>
+            <span>{t('nip04Nip44')}</span>
+            <span>{t('openSource')}</span>
+            <span>{t('developers')}</span>
+            <span>{t('tribeCopyright')}</span>
           </div>
         </div>
       </footer>
