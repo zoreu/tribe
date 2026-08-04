@@ -72,8 +72,12 @@ npm run start
 ├── public/
 ├── src/
 ├── package.json
-├── vite.config.js
+├── vite.config.ts
+├── server.js
+├── tsconfig.json
+├── bun.lock
 └── README.md
+└── LICENCE
 ```
 
 ---
