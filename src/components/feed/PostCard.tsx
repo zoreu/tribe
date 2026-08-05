@@ -26,7 +26,7 @@ interface PostCardProps {
 }
 
 export const PostCard: React.FC<PostCardProps> = ({ post }) => {
-  const { likePost, repostPost, commentPost, deletePost, auth, getShareableUrl, groups, client, isFriend, addFriend, getProfile, setViewProfilePubkey } = useNostr();
+  const { likePost, repostPost, commentPost, deletePost, auth, getShareableUrl, groups, client, isFriend, addFriend, getProfile, setViewProfilePubkey, ensureProfileLoaded } = useNostr();
   const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
@@ -48,10 +48,25 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
   // Renderização recursiva de comentários aninhados (resposta a comentário)
   const renderComment = (comment: PostItem, depth: number): React.ReactNode => {
     const replyAuthor = getProfile(comment.pubkey) || comment.author;
+    // Garante que o perfil do autor do comentário seja carregado (foto/nome),
+    // inclusive para quem publica a partir de outros apps (ex.: Amethyst).
+    ensureProfileLoaded(comment.pubkey);
     return (
       <div key={comment.id} className="p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl text-xs space-y-1">
       <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white gap-2">
-        <span className="truncate">{replyAuthor?.display_name || replyAuthor?.name || `Usuário ${comment.pubkey.slice(0, 8)}`}</span>
+        <button
+          type="button"
+          onClick={() => setViewProfilePubkey(comment.pubkey)}
+          className="flex items-center gap-2 min-w-0 text-left hover:underline"
+          title="Ver perfil"
+        >
+          <img
+            src={replyAuthor?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&auto=format&fit=crop&q=80'}
+            alt={replyAuthor?.name}
+            className="w-7 h-7 rounded-full object-cover shrink-0"
+          />
+          <span className="truncate">{replyAuthor?.display_name || replyAuthor?.name || `Usuário ${comment.pubkey.slice(0, 8)}`}</span>
+        </button>
         <span className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] text-slate-400 font-semibold">{new Date(comment.created_at * 1000).toLocaleString()}</span>
           <button
@@ -308,7 +323,7 @@ const handleAddComment = async (e: React.FormEvent) => {
                         ) : item.type === 'file' ? (
                           <div className="p-2"><FileAttachmentCard url={item.url} /></div>
                         ) : (
-                          <img src={item.url} alt={item.alt || ''} className="w-full max-h-[320px] object-cover" loading="lazy" />
+                          <img src={item.url} alt={item.alt || ''} className="w-full max-h-[320px] object-contain" loading="lazy" />
                         )}
                       </div>
                     ))}
@@ -357,7 +372,7 @@ const handleAddComment = async (e: React.FormEvent) => {
                       <img
                         src={item.url}
                         alt={item.alt || 'Mídia da postagem'}
-                        className="w-full max-h-[500px] object-cover hover:scale-[1.01] transition-transform"
+                        className="w-full max-h-[500px] object-contain"
                         loading="lazy"
                       />
                     )}
@@ -484,4 +499,5 @@ const handleAddComment = async (e: React.FormEvent) => {
     </article>
   );
 };
+
 

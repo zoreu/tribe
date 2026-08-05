@@ -51,6 +51,8 @@ interface NostrContextType {
 
   viewProfilePubkey: string | null;
   setViewProfilePubkey: (pubkey: string | null) => void;
+  ensureProfileLoaded: (pubkey: string) => void;
+  eventToPostItem: (ev: NostrEvent, displayContent?: string) => PostItem;
 
   selectedGroupId: string | null;
   setSelectedGroupId: (id: string | null) => void;
@@ -717,7 +719,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (depth > 30) return [];
     return (interactionsRef.current.replies[id] || [])
       .slice()
-      .sort((a, b) => a.created_at - b.created_at)
+      .sort((a, b) => b.created_at - a.created_at)
       .map(r => {
         // Recalcula curtidas/estado do comentário a partir da fonte real (Sets),
         // para que o contador reflita novas curtidas mesmo sem recriar o item.
@@ -2430,6 +2432,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         viewProfilePubkey,
         setViewProfilePubkey,
+        ensureProfileLoaded,
+        eventToPostItem,
 
         selectedGroupId,
         setSelectedGroupId,

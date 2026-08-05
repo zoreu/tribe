@@ -3,7 +3,7 @@ import { useNostr } from '../../context/NostrContext';
 import { Bell, MessageSquare } from 'lucide-react';
 
 export const NotificationBell: React.FC = () => {
-  const { chats, unreadChats, totalUnreadMessages, setActiveChatPubkey, setActiveTab, getProfile, requestNotificationPermission, pushEnabled } = useNostr();
+  const { chats, unreadChats, totalUnreadMessages, setActiveChatPubkey, setActiveTab, getProfile, requestNotificationPermission, pushEnabled, auth } = useNostr();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -16,8 +16,10 @@ export const NotificationBell: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Conversas ordenadas da mais recente para a mais antiga
+  // Conversas ordenadas da mais recente para a mais antiga.
+  // Conversa consigo mesmo (self-DM) não aparece no sininho.
   const conversations = Object.keys(chats)
+    .filter(pubkey => pubkey !== auth.pubkey)
     .map(pubkey => {
       const messages = chats[pubkey] || [];
       const last = messages[messages.length - 1];

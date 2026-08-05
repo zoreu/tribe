@@ -29,7 +29,11 @@ const RELAYS = [
   'wss://offchain.pub',
   'wss://relay.nostr.band',
   'wss://purplepag.es',
-  'wss://relay.snort.social'
+  'wss://relay.snort.social',
+  'wss://nostr.mom',
+  'wss://nostr.oxtr.dev',
+  'wss://auth.nostr1.com',
+  'wss://relay.0xchat.com'
 ];
 
 // Chaves VAPID para Web Push. Configure via variáveis de ambiente
@@ -131,6 +135,10 @@ app.post('/api/push/send', async (req, res) => {
   const sub = pubkey && subscriptions[pubkey];
   if (!sub) {
     return res.status(404).json({ error: 'pubkey não está inscrito em push' });
+  }
+  // Mensagem enviada pela própria pessoa (self-DM) não gera notificação
+  if (senderPubkey && senderPubkey === pubkey) {
+    return res.json({ ok: true, skipped: true });
   }
   // O link deve abrir a conversa com QUEM enviou a mensagem (senderPubkey)
   const chatPubkey = senderPubkey || pubkey;
@@ -276,8 +284,22 @@ async function checkOneUser(pk, sub) {
 
   if (!events || events.length === 0) return;
 
-  // A DM mais nova (por created_at)
-  const newest = events.reduce((a, b) => (a.created_at > b.created_at ? a : b));
+  // Ignora mensagens para si mesmo (self-DM): o destinatário é o próprio autor,
+  // então não deve disparar notificação.
+  const realEvents = events.filter(ev => ev.pubkey !== pk);
+  if (realEvents.length === 0) {
+    // Atualiza a linha de base mesmo assim (para não re-notificar depois)
+    const anyNewest = events.reduce((a, b) => (a.created_at > b.created_at ? a : b));
+    const anyMs = anyNewest.created_at * 1000;
+    if (sub.lastSeen && anyMs > sub.lastSeen) {
+      sub.lastSeen = Date.now();
+      persistSubscriptions();
+    }
+    return;
+  }
+
+  // A DM mais nova (por created_at) entre as mensagens de outras pessoas
+  const newest = realEvents.reduce((a, b) => (a.created_at > b.created_at ? a : b));
   const createdMs = newest.created_at * 1000;
 
   if (!sub.lastSeen) {
@@ -290,7 +312,7 @@ async function checkOneUser(pk, sub) {
   if (createdMs > sub.lastSeen) {
     sub.lastSeen = Date.now();
     persistSubscriptions();
-    console.log(`DM novo detectado para ${pk.slice(0, 12)}... (${events.length} DMs, mais nova ${newest.created_at})`);
+    console.log(`DM novo detectado para ${pk.slice(0, 12)}... (${realEvents.length} DMs, mais nova ${newest.created_at})`);
     sendPush(sub, `dm-${newest.id}`, newest.pubkey);
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNostr } from '../../context/NostrContext';
 import { 
@@ -35,6 +35,26 @@ export const ChatView: React.FC = () => {
     chatLoading
   } = useNostr();
   const { t } = useLanguage();
+  // Copiar mensagem com toque longo (mobile) / botão direito
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const longPressTimer = useRef<any>(null);
+
+  const copyMessage = (id: string, text: string) => {
+    if (!text) return;
+    try { navigator.clipboard.writeText(text); } catch {}
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(cur => (cur === id ? null : cur)), 2000);
+  };
+  const startLongPress = (id: string, text: string) => {
+    if (!text) return;
+    longPressTimer.current = setTimeout(() => copyMessage(id, text), 500);
+  };
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const [newFriendNpub, setNewFriendNpub] = useState('');
   const [messageText, setMessageText] = useState('');
@@ -182,13 +202,21 @@ export const ChatView: React.FC = () => {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-xs truncate">{friend.display_name || friend.name}</h4>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-xs truncate">{friend.display_name || friend.name}</h4>
+                        {friend.pubkey === auth.pubkey && (
+                          <span className="shrink-0 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-950 px-1.5 py-0.5 rounded-full">
+                            {t('you')}
+                          </span>
+                        )}
+                      </div>
                       <p className={`text-[11px] truncate ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
                         {friend.nip05 || friend.npub.slice(0, 12) + '...'}
                       </p>
                     </div>
                   </div>
 
+                  {friend.pubkey !== auth.pubkey && (
                   <button
                     onClick={(e) => handleRemoveFriend(pubkey, e)}
                     title="Remover amigo"
@@ -200,6 +228,7 @@ export const ChatView: React.FC = () => {
                   >
                     <UserX className="w-4 h-4" />
                   </button>
+                  )}
                 </div>
               );
             })
@@ -239,6 +268,7 @@ export const ChatView: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {activeFriend.pubkey !== auth.pubkey && (
                 <button
                   onClick={(e) => handleRemoveFriend(activeFriend.pubkey, e)}
                   className="px-3 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
@@ -246,6 +276,7 @@ export const ChatView: React.FC = () => {
                   <UserX className="w-3.5 h-3.5" />
                   <span>{t('remove')}</span>
                 </button>
+                )}
                 <div className="hidden sm:flex px-3 py-1 bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-bold items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4" />
                   <span>100% E2EE Criptografado</span>
@@ -280,7 +311,13 @@ export const ChatView: React.FC = () => {
                       key={msg.id}
                       className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                     >
-                      <div className={`max-w-[80%] sm:max-w-[70%] p-3 rounded-2xl text-xs space-y-1 shadow-sm ${
+                      <div
+                        onContextMenu={(e) => { e.preventDefault(); copyMessage(msg.id, messageText); }}
+                        onTouchStart={() => startLongPress(msg.id, messageText)}
+                        onTouchEnd={cancelLongPress}
+                        onTouchMove={cancelLongPress}
+                        title={messageText ? 'Segure para copiar' : undefined}
+                        className={`max-w-[80%] sm:max-w-[70%] p-3 rounded-2xl text-xs space-y-1 shadow-sm ${
                         isMe 
                           ? 'bg-blue-600 text-white rounded-br-none' 
                           : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-bl-none'
@@ -313,6 +350,9 @@ export const ChatView: React.FC = () => {
                           )
                         )}
                         <div className={`text-[9px] flex items-center justify-end gap-1 ${isMe ? 'text-blue-200' : 'text-slate-400'}`}>
+                          {copiedMsgId === msg.id && (
+                            <span className={`font-bold ${isMe ? 'text-emerald-300' : 'text-emerald-600'}`}>{t('copied')}</span>
+                          )}
                           <span>{new Date(msg.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           <Lock className="w-3 h-3" />
                         </div>

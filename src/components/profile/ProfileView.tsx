@@ -18,6 +18,7 @@ import { PostCard } from '../feed/PostCard';
 import { uploadMediaToNostrBuild } from '../../lib/nostr/media';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
 import { useLanguage } from '../../context/LanguageContext';
+import { linkifyText } from '../../lib/nostr/text';
 
 // Quadro de vídeo na grade de Mídias: usa preload="metadata" para mostrar o
 // primeiro quadro como prévia (em vez de quebrar) e um botão de play para tocar.
@@ -199,8 +200,8 @@ export const ProfileView: React.FC = () => {
                   </span>
                 )}
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed whitespace-pre-line">
-                {profile?.about || 'Nenhuma biografia adicionada ainda.'}
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed whitespace-pre-line break-words">
+                {profile?.about ? linkifyText(profile.about) : 'Nenhuma biografia adicionada ainda.'}
               </p>
 
               {/* Endereço Npub e Lightning */}
@@ -299,7 +300,7 @@ export const ProfileView: React.FC = () => {
                     <FileAttachmentCard url={m.url} />
                   </div>
                 ) : (
-                  <img src={m.url} alt="Mídia do usuário" className="w-full h-full object-cover hover:scale-105 transition-transform" />
+                  <img src={m.url} alt="Mídia do usuário" className="w-full h-full object-contain p-0.5" />
                 )}
               </div>
             ))

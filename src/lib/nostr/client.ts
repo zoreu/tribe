@@ -12,7 +12,11 @@ export const DEFAULT_RELAYS: RelayConfig[] = [
   { url: 'wss://offchain.pub', read: true, write: true, status: 'connected' },
   { url: 'wss://relay.nostr.band', read: true, write: true, status: 'connected' },
   { url: 'wss://purplepag.es', read: true, write: true, status: 'connected' },
-  { url: 'wss://relay.snort.social', read: true, write: true, status: 'connected' }
+  { url: 'wss://relay.snort.social', read: true, write: true, status: 'connected' },
+  { url: 'wss://nostr.mom', read: true, write: true, status: 'connected' },
+  { url: 'wss://nostr.oxtr.dev', read: true, write: true, status: 'connected' },
+  { url: 'wss://auth.nostr1.com', read: true, write: true, status: 'connected' },
+  { url: 'wss://relay.0xchat.com', read: true, write: true, status: 'connected' }
 ];
 
 export class NostrClient {
@@ -187,6 +191,87 @@ export class NostrClient {
       console.error('Erro ao buscar eventos querySync:', e);
       return [];
     }
+  }
+
+  // Busca perfis (kind 0) por nome usando o filtro "search" dos relays que o
+  // suportam (ex.: relay.snort.social), com timeout por relay para não travar
+  // quando um relay não responde.
+  // Busca perfis (kind 0) por nome usando NIP-50 (campo "search"):
+  // consulta TODOS os relays ativos + alguns conhecidos por suportar busca,
+  // com timeout por relay para não travar se algum não responder.
+  public async searchProfiles(term: string, limit = 20): Promise<NostrEvent[]> {
+    const targets = Array.from(new Set([
+      ...this.activeRelays,
+      'wss://relay.snort.social',
+      'wss://relay.damus.io',
+      'wss://relay.nostr.band'
+    ]));
+    console.log('[TribeSearch] NIP-50 search de perfis por nome:', term, '| relays:', targets.length);
+    const results = await Promise.all(
+      targets.map(r =>
+        Promise.race([
+          this.pool.querySync([r], { kinds: [0], search: term, limit }).catch((e) => {
+            console.log('[TribeSearch] erro no relay', r, e?.message || e);
+            return [];
+          }),
+          new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 6000))
+        ]).then((evs) => {
+          console.log(`[TribeSearch] relay ${r} -> ${Array.isArray(evs) ? evs.length : 0} perfis`);
+          return Array.isArray(evs) ? evs : [];
+        })
+      )
+    );
+    const flat = results.flat();
+    console.log('[TribeSearch] total de perfis encontrados (NIP-50):', flat.length);
+    return flat as NostrEvent[];
+  }
+
+  // Busca de perfis via Primal Cache API (wss://cache.primal.net/v1):
+  // usa o filtro "cache" com o método user_search.
+  public async searchProfilesPrimal(term: string, limit = 10): Promise<NostrEvent[]> {
+    const relay = 'wss://cache.primal.net/v1';
+    console.log('[TribeSearch] buscando perfis no Primal Cache:', term);
+    try {
+      const events = await Promise.race([
+        this.pool.querySync([relay], { cache: ['user_search', { query: term, limit }] } as any),
+        new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 8000))
+      ]);
+      console.log('[TribeSearch] Primal Cache retornou', Array.isArray(events) ? events.length : 0, 'perfis');
+      return (events || []) as NostrEvent[];
+    } catch (e) {
+      console.log('[TribeSearch] erro no Primal Cache:', e?.message || e);
+      return [];
+    }
+  }
+
+  // Busca local SEM NIP-50: puxa um pool grande de kind 0 de relays com bom
+  // índice e filtra por nome/apelido/bio localmente (como vários clientes fazem).
+  public async searchLocalProfiles(term: string, limit = 3000): Promise<NostrEvent[]> {
+    const relays = ['wss://nos.lol', 'wss://relay.primal.net', 'wss://relay.damus.io', 'wss://relay.snort.social'];
+    const q = term.toLowerCase();
+    console.log('[TribeSearch] busca local (pool kind 0, limit ' + limit + ') em', relays.join(', '));
+    const results = await Promise.all(
+      relays.map(r =>
+        Promise.race([
+          this.pool.querySync([r], { kinds: [0], limit }).catch(() => []),
+          new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 8000))
+        ]).then(evs => {
+          console.log(`[TribeSearch] pool local ${r} -> ${Array.isArray(evs) ? evs.length : 0} kind 0`);
+          return Array.isArray(evs) ? evs : [];
+        })
+      )
+    );
+    const flat = results.flat();
+    const filtered = flat.filter(ev => {
+      let m: any = {};
+      try { m = JSON.parse(ev.content || '{}'); } catch {}
+      const name = (m.name || '').toLowerCase();
+      const display = (m.display_name || '').toLowerCase();
+      const about = (m.about || '').toLowerCase();
+      return name.includes(q) || display.includes(q) || about.includes(q);
+    });
+    console.log(`[TribeSearch] busca local: ${flat.length} perfis no pool, ${filtered.length} bateram com "${term}"`);
+    return filtered as NostrEvent[];
   }
 
   // --- Busca de Perfis (Kind 0) ---
