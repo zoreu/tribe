@@ -97,8 +97,8 @@ export function extractMediaUrls(content: string): { textWithoutMedia: string; m
       media.push({ url, type: 'image' });
       cleanedText = cleanedText.replace(url, '');
     }
-    // Vídeos
-    else if (/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(lowerUrl) || lowerUrl.includes('youtube.com/watch') || lowerUrl.includes('youtu.be/')) {
+    // Vídeos (arquivos diretos; links do YouTube ficam no texto para virar player embed)
+    else if (/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(lowerUrl)) {
       media.push({ url, type: 'video' });
       cleanedText = cleanedText.replace(url, '');
     }

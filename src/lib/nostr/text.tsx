@@ -11,6 +11,21 @@ function linkClass(variant: 'default' | 'onBlue'): string {
     : "text-blue-500 dark:text-blue-400 underline underline-offset-2 break-all hover:text-blue-700 dark:hover:text-blue-300";
 }
 
+// Extrai o ID de um vídeo do YouTube a partir de URLs como:
+// https://youtu.be/5_b68PopIEU
+// https://www.youtube.com/watch?v=5_b68PopIEU
+// https://www.youtube.com/shorts/5_b68PopIEU  (e /embed/, /live/)
+function extractYouTubeId(url: string): string | null {
+  const clean = url.replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+  let m = clean.match(/^youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (m) return m[1];
+  m = clean.match(/^youtube\.com\/watch\?(?:.*[?&])?v=([a-zA-Z0-9_-]{11})/);
+  if (m) return m[1];
+  m = clean.match(/^youtube\.com\/(?:shorts|embed|live)\/([a-zA-Z0-9_-]{11})/);
+  if (m) return m[1];
+  return null;
+}
+
 // Renderiza uma referência NIP-19 (nevent/note/nprofile/npub/naddr) como um
 // link clicável no app, em vez de mostrar o bech32 cru.
 function renderNip19(part: string, variant: 'default' | 'onBlue', key: number): React.ReactNode {
@@ -71,6 +86,23 @@ export function linkifyText(text: string, variant: 'default' | 'onBlue' = 'defau
     if (!part) return null;
 
     if (/^https?:\/\//i.test(part)) {
+      // Links do YouTube viram player embed
+      const ytId = extractYouTubeId(part);
+      if (ytId) {
+        return (
+          <iframe
+            key={i}
+            src={`https://www.youtube.com/embed/${ytId}`}
+            title="YouTube video player"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+            className="w-full aspect-video my-1.5 rounded-lg"
+            style={{ border: 'none' }}
+          />
+        );
+      }
       return (
         <a
           key={i}

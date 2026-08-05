@@ -676,7 +676,10 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setActiveChatPubkey(chatPubkey);
         setActiveTab('friends');
       } else if (pubkey) {
+        // Abre o perfil da pessoa (não o próprio), carregando o kind 0 dela
+        setViewProfilePubkeyState(pubkey);
         setActiveTab('profile');
+        ensureProfileLoaded(pubkey);
       }
     }
   }, []);
