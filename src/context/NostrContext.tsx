@@ -429,6 +429,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return Object.keys(MOCK_PROFILES);
   });
 
+  // Amigos removidos na sessão — não devem voltar via kind 3 (propagação)
+  const removedFriendsRef = useRef<Set<string>>(new Set());
+
   // --- Notificações de Mensagem e Mensagens Não Lidas ---
   const [latestNotification, setLatestNotification] = useState<NotificationItem | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -1181,18 +1184,14 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Não permite adicionar usuários da lista de spam como amigos
     if (isSpamPubkey(cleanPubkey)) return;
 
-    let updatedList: string[] = [];
-    setFriends(prev => {
-      if (prev.includes(cleanPubkey)) {
-        updatedList = prev;
-        return prev;
-      }
-      updatedList = [...prev, cleanPubkey];
-      try {
-        localStorage.setItem('tribe_nostr_friends', JSON.stringify(updatedList));
-      } catch {}
-      return updatedList;
-    });
+    removedFriendsRef.current.delete(cleanPubkey);
+
+    // Calcula a lista fora do updater para publicar o kind 3 com o valor correto
+    const newList = friends.includes(cleanPubkey) ? friends : [...friends, cleanPubkey];
+    setFriends(newList);
+    try {
+      localStorage.setItem('tribe_nostr_friends', JSON.stringify(newList));
+    } catch {}
 
     if (!fetchedProfilesRef.current.has(cleanPubkey)) {
       fetchedProfilesRef.current.add(cleanPubkey);
@@ -1231,7 +1230,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     if (auth.pubkey && auth.authMode !== 'none') {
       try {
-        const tags = updatedList.map(pk => ['p', pk]);
+        const tags = newList.map(pk => ['p', pk]);
         await client.signAndSendEvent({
           kind: 3,
           tags,
@@ -1241,24 +1240,25 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.error('Erro ao salvar contato Kind 3 nos relays:', e);
       }
     }
-  }, [auth.pubkey, auth.authMode, auth.secretKey, client, getProfile, eventToPostItem, refreshPostInteractions, ingestPostEvent]);
+  }, [auth.pubkey, auth.authMode, auth.secretKey, client, friends, getProfile, eventToPostItem, refreshPostInteractions, ingestPostEvent]);
 
   const removeFriend = useCallback(async (targetPubkey: string) => {
     if (!targetPubkey) return;
     const cleanPubkey = targetPubkey.startsWith('npub1') ? client.npubToHex(targetPubkey) : targetPubkey;
 
-    let updatedList: string[] = [];
-    setFriends(prev => {
-      updatedList = prev.filter(pk => pk !== cleanPubkey);
-      try {
-        localStorage.setItem('tribe_nostr_friends', JSON.stringify(updatedList));
-      } catch {}
-      return updatedList;
-    });
+    // Marca como removido para não voltar via kind 3 (relay com dado antigo)
+    removedFriendsRef.current.add(cleanPubkey);
+
+    // Calcula a lista fora do updater para publicar o kind 3 com o valor correto
+    const newList = friends.filter(pk => pk !== cleanPubkey);
+    setFriends(newList);
+    try {
+      localStorage.setItem('tribe_nostr_friends', JSON.stringify(newList));
+    } catch {}
 
     if (auth.pubkey && auth.authMode !== 'none') {
       try {
-        const tags = updatedList.map(pk => ['p', pk]);
+        const tags = newList.map(pk => ['p', pk]);
         await client.signAndSendEvent({
           kind: 3,
           tags,
@@ -1268,7 +1268,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.error('Erro ao remover contato Kind 3 nos relays:', e);
       }
     }
-  }, [auth.pubkey, auth.authMode, auth.secretKey, client]);
+  }, [auth.pubkey, auth.authMode, auth.secretKey, client, friends]);
 
   const isFriend = useCallback((pubkey: string) => {
     if (!pubkey) return false;
@@ -1291,13 +1291,16 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       // 2. Busca lista de contatos / amigos (kind 3) do usuário
-      let currentFriends = [...friends];
+      let currentFriends = [...friends].filter(pk => !removedFriendsRef.current.has(pk) && !isSpamPubkey(pk));
       const contactEvents = await client.fetchEvents([
         { kinds: [3], authors: [pubkey], limit: 1 }
       ]);
 
       if (contactEvents && contactEvents.length > 0) {
-        const contactPubkeys = contactEvents[0].tags.filter(t => t[0] === 'p').map(t => t[1]);
+        const contactPubkeys = contactEvents[0].tags
+          .filter(t => t[0] === 'p')
+          .map(t => t[1])
+          .filter(pk => !removedFriendsRef.current.has(pk) && !isSpamPubkey(pk));
         if (contactPubkeys.length > 0) {
           currentFriends = Array.from(new Set([...currentFriends, ...contactPubkeys]));
           setFriends(currentFriends);
@@ -1383,15 +1386,17 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             event: ev
           };
 
-          // Adiciona o amigo à lista
-          setFriends(prev => {
-            if (prev.includes(otherPubkey)) return prev;
-            const updated = [...prev, otherPubkey];
-            try {
-              localStorage.setItem('tribe_nostr_friends', JSON.stringify(updated));
-            } catch {}
-            return updated;
-          });
+          // Adiciona o amigo à lista (respeitando remoções/spam)
+          if (!removedFriendsRef.current.has(otherPubkey) && !isSpamPubkey(otherPubkey)) {
+            setFriends(prev => {
+              if (prev.includes(otherPubkey)) return prev;
+              const updated = [...prev, otherPubkey];
+              try {
+                localStorage.setItem('tribe_nostr_friends', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
 
           client.fetchUserProfile(otherPubkey).then(p => {
             if (p) setProfiles(prev => ({ ...prev, [otherPubkey]: p }));
@@ -1539,7 +1544,10 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           } catch {}
         } else if (event.kind === 3 && auth.pubkey && event.pubkey === auth.pubkey) {
           // Evento de Lista de Contatos (Kind 3)
-          const contactPubkeys = event.tags.filter(t => t[0] === 'p').map(t => t[1]);
+          const contactPubkeys = event.tags
+            .filter(t => t[0] === 'p')
+            .map(t => t[1])
+            .filter(pk => !removedFriendsRef.current.has(pk) && !isSpamPubkey(pk));
           if (contactPubkeys.length > 0) {
             setFriends(prev => {
               const next = Array.from(new Set([...prev, ...contactPubkeys]));
@@ -1585,14 +1593,17 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             };
 
             // Adiciona automaticamente o amigo à lista ao receber mensagem
-            setFriends(prev => {
-              if (prev.includes(otherPubkey)) return prev;
-              const updated = [...prev, otherPubkey];
-              try {
-                localStorage.setItem('tribe_nostr_friends', JSON.stringify(updated));
-              } catch {}
-              return updated;
-            });
+            // (respeitando remoções e o filtro de spam)
+            if (!removedFriendsRef.current.has(otherPubkey) && !isSpamPubkey(otherPubkey)) {
+              setFriends(prev => {
+                if (prev.includes(otherPubkey)) return prev;
+                const updated = [...prev, otherPubkey];
+                try {
+                  localStorage.setItem('tribe_nostr_friends', JSON.stringify(updated));
+                } catch {}
+                return updated;
+              });
+            }
 
             client.fetchUserProfile(otherPubkey).then(p => {
               if (p) setProfiles(prev => ({ ...prev, [otherPubkey]: p }));
