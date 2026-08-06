@@ -11,12 +11,16 @@ import {
   UserX,
   Bell,
   Loader2,
-  ArrowLeft
+  ArrowLeft,
+  Copy,
+  Check
 } from 'lucide-react';
 import { uploadMediaToNostrBuild, extractMediaUrls } from '../../lib/nostr/media';
 import { linkifyText } from '../../lib/nostr/text';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
 import { AutoTranslated } from '../shared/AutoTranslated';
+import { copyToClipboard } from '../../lib/clipboard';
+import { isSpamPubkey } from '../../lib/spamFilter';
 
 export const ChatView: React.FC = () => {
   const { 
@@ -34,14 +38,22 @@ export const ChatView: React.FC = () => {
     unreadChats,
     chatLoading
   } = useNostr();
-  const { t } = useLanguage();
+const { t } = useLanguage();
   // Copiar mensagem com toque longo (mobile) / botão direito
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [copiedNpub, setCopiedNpub] = useState(false);
   const longPressTimer = useRef<any>(null);
+
+  const handleCopyNpub = () => {
+    if (!activeFriend) return;
+    copyToClipboard(activeFriend.npub);
+    setCopiedNpub(true);
+    setTimeout(() => setCopiedNpub(false), 2000);
+  };
 
   const copyMessage = (id: string, text: string) => {
     if (!text) return;
-    try { navigator.clipboard.writeText(text); } catch {}
+    try { copyToClipboard(text); } catch {}
     setCopiedMsgId(id);
     setTimeout(() => setCopiedMsgId(cur => (cur === id ? null : cur)), 2000);
   };
@@ -61,8 +73,10 @@ export const ChatView: React.FC = () => {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
-  const activeFriend = activeChatPubkey ? getProfile(activeChatPubkey) : null;
-  const currentMessages = activeChatPubkey ? (chats[activeChatPubkey] || []) : [];
+  // Nunca abre conversa de usuário bloqueado (filtro de spam)
+  const effectiveActive = activeChatPubkey && !isSpamPubkey(activeChatPubkey) ? activeChatPubkey : null;
+  const activeFriend = effectiveActive ? getProfile(effectiveActive) : null;
+  const currentMessages = effectiveActive ? (chats[effectiveActive] || []) : [];
 
   const handleAddFriend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +143,7 @@ export const ChatView: React.FC = () => {
       {/* Lista de Amigos: ocupa a tela quando nenhuma conversa está aberta e é
           substituída pela caixa de mensagem (com botão voltar) ao selecionar
           um amigo — comportamento igual em mobile e desktop. */}
-      <div className={`${activeChatPubkey ? 'hidden' : 'flex'} flex-1 flex-col bg-slate-50/50 dark:bg-slate-900/30 min-h-0`}>
+      <div className={`${effectiveActive ? 'hidden' : 'flex'} flex-1 flex-col bg-slate-50/50 dark:bg-slate-900/30 min-h-0`}>
         <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col min-h-0">
 
         {/* Header Amigos */}
@@ -173,7 +187,7 @@ export const ChatView: React.FC = () => {
               </p>
             </div>
           ) : (
-            friends.map(pubkey => {
+            friends.filter(pk => !isSpamPubkey(pk)).map(pubkey => {
               const friend = getProfile(pubkey);
               const isSelected = activeChatPubkey === pubkey;
               const unreadCount = unreadChats[pubkey] || 0;
@@ -193,7 +207,7 @@ export const ChatView: React.FC = () => {
                       <img
                         src={friend.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                         alt={friend.name}
-                        className="w-10 h-10 rounded-full object-cover shrink-0 border border-white/20"
+                        className="w-10 h-10 aspect-square rounded-full object-cover shrink-0 border border-white/20"
                       />
                       {unreadCount > 0 && (
                         <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center animate-pulse border-2 border-white dark:border-slate-800">
@@ -240,7 +254,7 @@ export const ChatView: React.FC = () => {
 
       {/* Área da Conversa Criptografada: abre por cima da lista de amigos
           quando um chat está ativo, centralizada na página. */}
-      <div className={`${activeChatPubkey ? 'flex' : 'hidden'} flex-1 flex-col bg-white dark:bg-slate-800 min-h-0`}>
+      <div className={`${effectiveActive ? 'flex' : 'hidden'} flex-1 flex-col bg-white dark:bg-slate-800 min-h-0`}>
         {activeFriend ? (
           <>
             <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col min-h-0">
@@ -259,7 +273,7 @@ export const ChatView: React.FC = () => {
                 <img
                   src={activeFriend.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'}
                   alt={activeFriend.name}
-                  className="w-10 h-10 rounded-full object-cover shrink-0"
+                  className="w-10 h-10 aspect-square rounded-full object-cover shrink-0"
                 />
                 <div className="min-w-0">
                   <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">{activeFriend.display_name || activeFriend.name}</h3>
@@ -268,6 +282,14 @@ export const ChatView: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleCopyNpub}
+                  className="p-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-full transition-colors"
+                  title="Copiar chave pública npub"
+                >
+                  {copiedNpub ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+
                 {activeFriend.pubkey !== auth.pubkey && (
                 <button
                   onClick={(e) => handleRemoveFriend(activeFriend.pubkey, e)}
@@ -323,9 +345,9 @@ export const ChatView: React.FC = () => {
                           : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-bl-none'
                       }`}>
                         {messageText && (
-                          <p className="leading-relaxed whitespace-pre-wrap break-words">
+                          <div className="leading-relaxed whitespace-pre-wrap break-words">
                             <AutoTranslated text={messageText} variant={isMe ? 'onBlue' : 'default'} />
-                          </p>
+                          </div>
                         )}
                         {media.length > 0 && media.map((m, idx) => (
                           <div key={idx} className="mt-1.5 rounded-lg overflow-hidden bg-black/5 dark:bg-black/30">
@@ -423,3 +445,4 @@ export const ChatView: React.FC = () => {
     </div>
   );
 };
+

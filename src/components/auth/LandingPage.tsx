@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNostr } from '../../context/NostrContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { copyToClipboard } from '../../lib/clipboard';
 import { ShieldCheck, Sparkles, Key, PlusCircle, Lock, Radio, Copy, Check, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
@@ -47,7 +48,7 @@ export const LandingPage: React.FC = () => {
 
   const handleCopyNsec = () => {
     if (createdKeys) {
-      navigator.clipboard.writeText(createdKeys.nsec);
+      copyToClipboard(createdKeys.nsec);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     }
@@ -55,7 +56,7 @@ export const LandingPage: React.FC = () => {
 
   const handleCopyNpub = () => {
     if (createdKeys) {
-      navigator.clipboard.writeText(createdKeys.npub);
+      copyToClipboard(createdKeys.npub);
       setCopiedNpub(true);
       setTimeout(() => setCopiedNpub(false), 2500);
     }

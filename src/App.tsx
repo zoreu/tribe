@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NostrProvider, useNostr } from './context/NostrContext';
 import { useLanguage } from './context/LanguageContext';
+import { isSpamPubkey } from './lib/spamFilter';
 import { Header } from './components/layout/Header';
 import { SidebarLeft } from './components/layout/SidebarLeft';
 import { SidebarRight } from './components/layout/SidebarRight';
@@ -189,6 +190,9 @@ deepLink
 
   // Filtra posts no feed pelo modo selecionado e pela query de busca
   const filteredPosts = posts.filter(p => {
+    if (isSpamPubkey(p.pubkey) || (p.repostOf && isSpamPubkey(p.repostOf.pubkey))) {
+      return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matches = (
@@ -233,8 +237,10 @@ deepLink
         {/* Centro: Conteúdo Dinâmico com base na Tab Ativa */}
         <div className="flex-1 min-w-0">
 
-          {/* Busca: exibe resultados de pessoas, grupos e publicações */}
-          {searchQuery.trim().length > 0 ? (
+          {/* Busca: exibe resultados de pessoas, grupos e publicações.
+              A aba Perfil tem prioridade: ao clicar no nome/foto de um autor
+              dentro dos resultados, abre o perfil dele mesmo com busca ativa. */}
+          {searchQuery.trim().length > 0 && activeTab !== 'profile' ? (
             <SearchResults query={searchQuery} onClose={() => setSearchQuery('')} />
           ) : (
             <>
@@ -248,7 +254,7 @@ deepLink
                   <img
                     src={auth.profile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                     alt="Avatar"
-                    className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                    className="w-11 h-11 aspect-square rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
                   />
                   <button
                     onClick={() => auth.pubkey ? setIsPostModalOpen(true) : setShowAuthModal(true)}

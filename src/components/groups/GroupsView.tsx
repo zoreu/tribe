@@ -626,7 +626,7 @@ export const GroupsView: React.FC = () => {
                           <img
                             src={mod?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                             alt={mod?.name}
-                            className="w-7 h-7 rounded-full object-cover shrink-0"
+                            className="w-7 h-7 aspect-square rounded-full object-cover shrink-0"
                           />
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">

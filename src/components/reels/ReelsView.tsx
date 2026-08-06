@@ -208,7 +208,7 @@ export const ReelsView: React.FC = () => {
                     <img
                       src={author?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                       alt={author?.name}
-                      className="w-10 h-10 rounded-full object-cover border-2 border-white/50"
+                      className="w-10 h-10 aspect-square rounded-full object-cover border-2 border-white/50"
                     />
                     <div>
                       <h4 className="font-bold text-sm text-white">{author?.display_name || author?.name || `Usuário ${post.pubkey.slice(0, 8)}`}</h4>

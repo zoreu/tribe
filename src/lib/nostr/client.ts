@@ -276,14 +276,31 @@ export class NostrClient {
 
   // --- Busca de Perfis (Kind 0) ---
   public async fetchUserProfile(pubkeyHex: string): Promise<UserProfile | null> {
+    // Consulta os relays ativos + um conjunto maior de relays com bom índice,
+    // com timeout por relay para não travar se algum não responder.
+    const relays = Array.from(new Set([
+      ...this.activeRelays,
+      'wss://nos.lol',
+      'wss://relay.primal.net',
+      'wss://relay.damus.io',
+      'wss://relay.snort.social',
+      'wss://relay.nostr.band',
+      'wss://purplepag.es',
+      'wss://offchain.pub'
+    ]));
     try {
-      const events = await this.pool.querySync(this.activeRelays, {
-        kinds: [0],
-        authors: [pubkeyHex],
-        limit: 1
-      });
-
+      const results = await Promise.all(
+        relays.map(r =>
+          Promise.race([
+            this.pool.querySync([r], { kinds: [0], authors: [pubkeyHex], limit: 1 }).catch(() => []),
+            new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 6000))
+          ])
+        )
+      );
+      const events = results.flat();
       if (events && events.length > 0) {
+        // Usa o perfil mais recente
+        events.sort((a, b) => b.created_at - a.created_at);
         const ev = events[0];
         const metadata = JSON.parse(ev.content);
         return {

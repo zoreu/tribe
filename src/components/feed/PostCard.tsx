@@ -3,6 +3,8 @@ import { PostItem } from '../../types';
 import { useNostr } from '../../context/NostrContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { linkifyText } from '../../lib/nostr/text';
+import { copyToClipboard } from '../../lib/clipboard';
+import { isSpamPubkey } from '../../lib/spamFilter';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
 import { AutoTranslated } from '../shared/AutoTranslated';
 import * as nip19 from 'nostr-tools/nip19';
@@ -47,6 +49,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
   // Renderização recursiva de comentários aninhados (resposta a comentário)
   const renderComment = (comment: PostItem, depth: number): React.ReactNode => {
+    // Remove comentários de usuários bloqueados (filtro de spam)
+    if (isSpamPubkey(comment.pubkey)) return null;
     const replyAuthor = getProfile(comment.pubkey) || comment.author;
     // Garante que o perfil do autor do comentário seja carregado (foto/nome),
     // inclusive para quem publica a partir de outros apps (ex.: Amethyst).
@@ -63,7 +67,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
           <img
             src={replyAuthor?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&auto=format&fit=crop&q=80'}
             alt={replyAuthor?.name}
-            className="w-7 h-7 rounded-full object-cover shrink-0"
+            className="w-7 h-7 aspect-square rounded-full object-cover shrink-0"
           />
           <span className="truncate">{replyAuthor?.display_name || replyAuthor?.name || `Usuário ${comment.pubkey.slice(0, 8)}`}</span>
         </button>
@@ -78,7 +82,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
           </button>
         </span>
       </div>
-        <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={comment.content} /></p>
+        <div className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={comment.content} /></div>
         <div className="pt-1 flex items-center gap-3">
           <button
             type="button"
@@ -121,9 +125,9 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const group = post.groupId ? groups.find(g => g.id === post.groupId) : null;
   const totalComments = (relayReplies.length > 0 ? relayReplies.length : displayPost.repliesCount || 0) + localComments.length;
 
-  const handleShare = () => {
+const handleShare = () => {
     const shareUrl = getShareableUrl('note', displayPost.id);
-    navigator.clipboard.writeText(shareUrl);
+    copyToClipboard(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -137,7 +141,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         relays: [],
         author: displayPost.pubkey
       });
-      navigator.clipboard.writeText(`nostr:${nevent}`);
+      copyToClipboard(`nostr:${nevent}`);
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     } catch {}
@@ -203,7 +207,7 @@ const handleAddComment = async (e: React.FormEvent) => {
               <img
                 src={authorProfile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'}
                 alt={authorProfile?.name}
-                className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-slate-700 hover:ring-2 hover:ring-blue-400 transition-shadow"
+                className="w-11 h-11 aspect-square rounded-full object-cover border border-slate-200 dark:border-slate-700 hover:ring-2 hover:ring-blue-400 transition-shadow"
               />
             </button>
             <div className="min-w-0 flex-1">
@@ -294,7 +298,7 @@ const handleAddComment = async (e: React.FormEvent) => {
                   <img
                     src={originalProfile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                     alt={originalProfile?.name}
-                    className="w-9 h-9 rounded-full object-cover shrink-0"
+                    className="w-9 h-9 aspect-square rounded-full object-cover shrink-0"
                   />
                   <div className="min-w-0">
                     <h5 className="font-bold text-sm text-slate-900 dark:text-white truncate">
@@ -307,9 +311,9 @@ const handleAddComment = async (e: React.FormEvent) => {
                 </button>
 
                 {displayPost.content && (
-                  <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words">
+                  <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words">
                     <AutoTranslated text={displayPost.content} />
-                  </p>
+                  </div>
                 )}
 
                 {displayPost.media && displayPost.media.length > 0 && (
@@ -335,9 +339,9 @@ const handleAddComment = async (e: React.FormEvent) => {
         ) : (
           <>
             {/* Texto da Postagem */}
-            <p className="text-base text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words pt-1">
+            <div className="text-base text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line break-words pt-1">
               <AutoTranslated text={displayText} />
-            </p>
+            </div>
 
             {/* Criptografia Badge */}
             {post.isEncrypted && (
@@ -384,12 +388,12 @@ const handleAddComment = async (e: React.FormEvent) => {
         )}
 
         {/* Barra de Ações (Likes, Reposts, Comentários, Compartilhar) */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-1 text-slate-500">
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-700/60 flex flex-wrap items-center justify-center gap-1 text-slate-500">
           
           {/* Curtir */}
           <button
             onClick={() => likePost(displayPost)}
-            className={`flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-colors ${
+            className={`flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1 text-xs font-bold transition-colors ${
               displayPost.userLiked 
                 ? 'text-red-500 bg-red-50 dark:bg-red-950/30' 
                 : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-red-500'
@@ -402,7 +406,7 @@ const handleAddComment = async (e: React.FormEvent) => {
           {/* Copiar ID (nostr:nevent) para referenciar em outra postagem */}
           <button
             onClick={handleCopyId}
-            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-amber-500 transition-colors"
+            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-amber-500 transition-colors"
             title="Copiar identificador nostr:nevent para colar em outra postagem"
           >
             {copiedId ? <Check className="w-4 h-4 text-emerald-500" /> : <Link2 className="w-4 h-4" />}
@@ -412,7 +416,7 @@ const handleAddComment = async (e: React.FormEvent) => {
           {/* Repostar */}
           <button
             onClick={() => repostPost(displayPost)}
-            className={`flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-colors ${
+            className={`flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1 text-xs font-bold transition-colors ${
               displayPost.userReposted 
                 ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' 
                 : 'hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-emerald-500'
@@ -425,7 +429,7 @@ const handleAddComment = async (e: React.FormEvent) => {
           {/* Comentar */}
           <button
             onClick={() => setShowComments(!showComments)}
-            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-blue-500 transition-colors"
+            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-blue-500 transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
             <span>{totalComments > 0 ? totalComments : t('comment')}</span>
@@ -434,7 +438,7 @@ const handleAddComment = async (e: React.FormEvent) => {
           {/* Compartilhar Deep Link */}
           <button
             onClick={handleShare}
-            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-indigo-500 transition-colors"
+            className="flex-1 py-1.5 rounded-xl flex items-center justify-center gap-1 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-indigo-500 transition-colors"
             title={t('copyLinkTip')}
           >
             {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Share2 className="w-4 h-4" />}
@@ -455,7 +459,7 @@ const handleAddComment = async (e: React.FormEvent) => {
                   <span>{c.authorName}</span>
                   <span className="text-[10px] text-slate-400">{c.time}</span>
                 </div>
-                <p className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={c.text} /></p>
+                <div className="text-slate-700 dark:text-slate-300 break-words whitespace-pre-wrap"><AutoTranslated text={c.text} /></div>
               </div>
             ))}
 

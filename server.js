@@ -22,6 +22,14 @@ process.on('uncaughtException', (err) => {
 
 const PORT = process.env.PORT || 3000;
 const APP_URL = process.env.APP_URL || 'https://tribe.wasmer.app';
+
+// Filtro de spam: pubkeys (hex) que não devem receber/gerar push
+const SPAM_PUBKEYS = new Set([
+  'fa31ff61cfa79b1cc6c0f2a923a286460f5910266930631b48fb7e733310e988',
+  'c0f3d58dfa1d583f0c4652935b75cd4c8ea22de563a83039f6eccf01d637d3cf',
+  'c816b6fde516c9ad5ff55b372b7fbbe9000e98c93fccbd4f5556350985e8b646',
+  'c67166fe86362edba9cfba5e6944afd91186880e44f016d4623827a9e1940dce'
+]);
 const RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
@@ -136,8 +144,8 @@ app.post('/api/push/send', async (req, res) => {
   if (!sub) {
     return res.status(404).json({ error: 'pubkey não está inscrito em push' });
   }
-  // Mensagem enviada pela própria pessoa (self-DM) não gera notificação
-  if (senderPubkey && senderPubkey === pubkey) {
+  // Mensagem enviada pela própria pessoa (self-DM) ou de um usuário bloqueado
+  if ((senderPubkey && senderPubkey === pubkey) || (senderPubkey && SPAM_PUBKEYS.has(senderPubkey))) {
     return res.json({ ok: true, skipped: true });
   }
   // O link deve abrir a conversa com QUEM enviou a mensagem (senderPubkey)
@@ -284,9 +292,8 @@ async function checkOneUser(pk, sub) {
 
   if (!events || events.length === 0) return;
 
-  // Ignora mensagens para si mesmo (self-DM): o destinatário é o próprio autor,
-  // então não deve disparar notificação.
-  const realEvents = events.filter(ev => ev.pubkey !== pk);
+  // Ignora mensagens para si mesmo (self-DM) e DMs de usuários bloqueados
+  const realEvents = events.filter(ev => ev.pubkey !== pk && !SPAM_PUBKEYS.has(ev.pubkey));
   if (realEvents.length === 0) {
     // Atualiza a linha de base mesmo assim (para não re-notificar depois)
     const anyNewest = events.reduce((a, b) => (a.created_at > b.created_at ? a : b));

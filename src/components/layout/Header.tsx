@@ -186,11 +186,13 @@ export const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery, onO
                 onClick={() => setActiveTab('profile')}
                 className="flex items-center gap-2 p-1 pl-2 pr-3 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
-                <img
-                  src={auth.profile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
-                  alt="Avatar"
-                  className="w-7 h-7 rounded-full object-cover"
-                />
+                <div className="w-7 h-7 rounded-full overflow-hidden shrink-0">
+                  <img
+                    src={auth.profile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 max-w-[100px] truncate hidden sm:inline">
                   {auth.profile?.name || 'Meu Perfil'}
                 </span>

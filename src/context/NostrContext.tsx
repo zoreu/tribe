@@ -15,6 +15,7 @@ import {
 import { NostrClient, DEFAULT_RELAYS } from '../lib/nostr/client';
 import { MOCK_POSTS, MOCK_PROFILES, MOCK_GROUPS } from '../lib/nostr/mockData';
 import { extractMediaUrls } from '../lib/nostr/media';
+import { isSpamPubkey } from '../lib/spamFilter';
 
 // Converte uma chave VAPID base64url para Uint8Array (exigido pela Push API)
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -53,6 +54,7 @@ interface NostrContextType {
   setViewProfilePubkey: (pubkey: string | null) => void;
   ensureProfileLoaded: (pubkey: string) => void;
   eventToPostItem: (ev: NostrEvent, displayContent?: string) => PostItem;
+  ingestPostEvent: (ev: NostrEvent, displayContent?: string) => boolean;
 
   selectedGroupId: string | null;
   setSelectedGroupId: (id: string | null) => void;
@@ -532,6 +534,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const result: Record<string, number> = {};
     Object.keys(chats).forEach(pk => {
       if (pk === activeChatPubkeyState) return;
+      if (isSpamPubkey(pk)) return; // ignora conversas de usuários bloqueados
       const lastRead = lastReadRef.current[pk] || 0;
       const count = chats[pk].filter(m => m.senderPubkey !== auth.pubkey && m.created_at > lastRead).length;
       if (count > 0) result[pk] = count;
@@ -547,6 +550,12 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [chatLoading, setChatLoading] = useState(false);
 
   const setActiveChatPubkey = useCallback((pubkey: string | null) => {
+    // Nunca abre conversa de usuário bloqueado (filtro de spam)
+    if (pubkey && isSpamPubkey(pubkey)) {
+      setActiveChatPubkeyState(null);
+      setChatLoading(false);
+      return;
+    }
     setActiveChatPubkeyState(pubkey);
     if (pubkey) {
       markChatRead(pubkey);
@@ -722,6 +731,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (depth > 30) return [];
     return (interactionsRef.current.replies[id] || [])
       .slice()
+      .filter(r => !isSpamPubkey(r.pubkey))
       .sort((a, b) => b.created_at - a.created_at)
       .map(r => {
         // Recalcula curtidas/estado do comentário a partir da fonte real (Sets),
@@ -887,12 +897,16 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const replies = interactionsRef.current.replies;
 
       for (const ev of reactions || []) {
+        if (isSpamPubkey(ev.pubkey)) continue;
         const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
         if (eTag) (likes[eTag] || (likes[eTag] = new Set())).add(ev.pubkey);
       }
       for (const ev of repostEvents || []) {
         const eTag = ev.tags.find(t => t[0] === 'e')?.[1];
+        const repostOriginal = ev.tags.find(t => t[0] === 'p')?.[1];
         if (eTag) (reposts[eTag] || (reposts[eTag] = new Set())).add(ev.pubkey);
+        // Ignora reposts de usuários bloqueados ou de postagens de bloqueados
+        if (isSpamPubkey(ev.pubkey) || isSpamPubkey(repostOriginal)) continue;
         // Adiciona o repost ao feed como postagem (estilo Twitter)
         const repostItem = eventToPostItem(ev);
         const originalAuthor = ev.tags.find(t => t[0] === 'p')?.[1];
@@ -903,6 +917,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
       }
       for (const ev of replyEvents || []) {
+        // Ignora comentários de usuários bloqueados
+        if (isSpamPubkey(ev.pubkey)) continue;
         const eTags = ev.tags.filter(t => t[0] === 'e').map(t => t[1]);
         const parentId = eTags.length ? eTags[eTags.length - 1] : undefined;
         if (parentId && parentId !== ev.id) {
@@ -957,6 +973,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   // Processa um evento kind 1: se for resposta/comentário (tag "e"), anexa ao post pai;
   // caso contrário, adiciona como post normal do feed.
   const ingestPostEvent = useCallback((ev: NostrEvent, displayContent?: string): boolean => {
+    // Filtro de spam: ignora postagens/repostas/respostas de usuários bloqueados
+    if (isSpamPubkey(ev.pubkey)) return false;
+
     // Busca o perfil (kind 0) do autor se ainda não estiver carregado, para exibir o nome real
     if (!fetchedProfilesRef.current.has(ev.pubkey)) {
       fetchedProfilesRef.current.add(ev.pubkey);
@@ -1159,6 +1178,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (!targetPubkey) return;
     const cleanPubkey = targetPubkey.startsWith('npub1') ? client.npubToHex(targetPubkey) : targetPubkey;
 
+    // Não permite adicionar usuários da lista de spam como amigos
+    if (isSpamPubkey(cleanPubkey)) return;
+
     let updatedList: string[] = [];
     setFriends(prev => {
       if (prev.includes(cleanPubkey)) {
@@ -1334,6 +1356,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const allDms = [...dmSent, ...dmReceived].sort((a, b) => a.created_at - b.created_at);
       for (const ev of allDms) {
+        // Ignora DMs de usuários bloqueados (filtro de spam)
+        if (isSpamPubkey(ev.pubkey)) continue;
         const pTag = ev.tags.find(t => t[0] === 'p')?.[1];
         const otherPubkey = ev.pubkey === pubkey ? pTag : ev.pubkey;
 
@@ -1532,6 +1556,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           }
         } else if (event.kind === 4) {
           // Evento de Mensagem Direta Criptografada (Kind 4 DM)
+          // Ignora DMs de usuários bloqueados (sem chat, sem notificação, sem push)
+          if (isSpamPubkey(event.pubkey)) return;
+
           const pTag = event.tags.find(t => t[0] === 'p')?.[1];
           const otherPubkey = auth.pubkey && event.pubkey === auth.pubkey ? pTag : event.pubkey;
 
@@ -1691,6 +1718,10 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           // Evento de Repost (NIP-18)
           const eTag = event.tags.find(t => t[0] === 'e')?.[1];
           if (!eTag) return;
+          const repostOriginalAuthor = event.tags.find(t => t[0] === 'p')?.[1];
+
+          // Ignora reposts de usuários bloqueados ou de postagens de bloqueados
+          if (isSpamPubkey(event.pubkey) || isSpamPubkey(repostOriginalAuthor)) return;
 
           const reposts = interactionsRef.current.reposts[eTag] || (interactionsRef.current.reposts[eTag] = new Set());
           reposts.add(event.pubkey);
@@ -1706,8 +1737,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           const repostItem = eventToPostItem(event);
           // Busca o perfil do autor da postagem original (tag "p") para
           // mostrar o nome real no cartão embutido do repost.
-          const originalAuthor = event.tags.find(t => t[0] === 'p')?.[1];
-          if (originalAuthor) ensureProfileLoaded(originalAuthor);
+          if (repostOriginalAuthor) ensureProfileLoaded(repostOriginalAuthor);
           setPosts(prev => {
             if (prev.some(p => p.id === event.id)) return prev;
             return [repostItem, ...prev].sort((a, b) => b.created_at - a.created_at);
@@ -2437,6 +2467,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setViewProfilePubkey,
         ensureProfileLoaded,
         eventToPostItem,
+        ingestPostEvent,
 
         selectedGroupId,
         setSelectedGroupId,

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNostr } from '../../context/NostrContext';
+import { isSpamPubkey } from '../../lib/spamFilter';
 import { Bell, MessageSquare } from 'lucide-react';
 
 export const NotificationBell: React.FC = () => {
@@ -19,7 +20,7 @@ export const NotificationBell: React.FC = () => {
   // Conversas ordenadas da mais recente para a mais antiga.
   // Conversa consigo mesmo (self-DM) não aparece no sininho.
   const conversations = Object.keys(chats)
-    .filter(pubkey => pubkey !== auth.pubkey)
+    .filter(pubkey => pubkey !== auth.pubkey && !isSpamPubkey(pubkey))
     .map(pubkey => {
       const messages = chats[pubkey] || [];
       const last = messages[messages.length - 1];
@@ -93,7 +94,7 @@ export const NotificationBell: React.FC = () => {
                     <img
                       src={c.profile.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                       alt={c.profile.name}
-                      className="w-10 h-10 rounded-full object-cover"
+                      className="w-10 h-10 aspect-square rounded-full object-cover"
                     />
                     {c.unread > 0 && (
                       <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800">

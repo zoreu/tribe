@@ -19,6 +19,7 @@ import { uploadMediaToNostrBuild } from '../../lib/nostr/media';
 import { FileAttachmentCard } from '../shared/FileAttachmentCard';
 import { useLanguage } from '../../context/LanguageContext';
 import { linkifyText } from '../../lib/nostr/text';
+import { copyToClipboard } from '../../lib/clipboard';
 
 // Quadro de vídeo na grade de Mídias: usa preload="metadata" para mostrar o
 // primeiro quadro como prévia (em vez de quebrar) e um botão de play para tocar.
@@ -108,7 +109,7 @@ export const ProfileView: React.FC = () => {
   const mediaPosts = userPosts.filter(p => p.media && p.media.length > 0);
 
   const handleCopyNpub = () => {
-    navigator.clipboard.writeText(profileNpub);
+    copyToClipboard(profileNpub);
     setCopiedNpub(true);
     setTimeout(() => setCopiedNpub(false), 2000);
   };
@@ -187,7 +188,7 @@ export const ProfileView: React.FC = () => {
             <img
               src={profile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80'}
               alt="Avatar"
-              className="-mt-16 sm:-mt-20 w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover border-4 border-white dark:border-slate-800 shadow-xl shrink-0 z-10"
+              className="-mt-16 sm:-mt-20 w-24 h-24 sm:w-28 sm:h-28 aspect-square rounded-3xl object-cover border-4 border-white dark:border-slate-800 shadow-xl shrink-0 z-10"
             />
             <div className="space-y-1.5 min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
@@ -200,9 +201,11 @@ export const ProfileView: React.FC = () => {
                   </span>
                 )}
               </div>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed whitespace-pre-line break-words">
-                {profile?.about ? linkifyText(profile.about) : 'Nenhuma biografia adicionada ainda.'}
-              </p>
+              <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed whitespace-pre-line break-words mb-2">
+                {profile?.about
+                  ? linkifyText(profile.about.replace(/(https?:\/\/)/gi, '\n$1'))
+                  : 'Nenhuma biografia adicionada ainda.'}
+              </div>
 
               {/* Endereço Npub e Lightning */}
               <div className="flex items-center gap-3 pt-1 text-xs flex-wrap">

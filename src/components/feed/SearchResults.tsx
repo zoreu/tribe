@@ -19,6 +19,8 @@ import {
 import { PostCard } from './PostCard';
 import { useLanguage } from '../../context/LanguageContext';
 import { linkifyText } from '../../lib/nostr/text';
+import { copyToClipboard } from '../../lib/clipboard';
+import { isSpamPubkey } from '../../lib/spamFilter';
 import * as nip19 from 'nostr-tools/nip19';
 
 interface SearchResultsProps {
@@ -27,7 +29,7 @@ interface SearchResultsProps {
 }
 
 export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) => {
-  const { groups, profiles, posts, getProfile, setSelectedGroupId, setActiveTab, setActiveChatPubkey, isFriend, addFriend, client, ensureProfileLoaded, auth, eventToPostItem } = useNostr();
+  const { groups, profiles, posts, getProfile, setSelectedGroupId, setActiveTab, setActiveChatPubkey, isFriend, addFriend, client, ensureProfileLoaded, auth, eventToPostItem, ingestPostEvent } = useNostr();
   const { t } = useLanguage();
   const [selectedProfilePubkey, setSelectedProfilePubkey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -48,6 +50,8 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
     client.fetchEvents([{ kinds: [1], authors: [selectedProfilePubkey], limit: 40 }])
       .then(evts => {
         if (cancelled) return;
+        // Ingere no estado do app para que curtidas/reposts tenham feedback
+        (evts || []).forEach(ev => ingestPostEvent(ev));
         const items = (evts || [])
           .map(ev => eventToPostItem(ev))
           .sort((a, b) => b.created_at - a.created_at);
@@ -198,7 +202,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
   // Pessoas/perfis que batem com o termo (nome, apelido ou nip05)
   const localProfiles = Object.keys(profiles)
     .map(pk => profiles[pk])
-    .filter(p =>
+    .filter(p => !isSpamPubkey(p.pubkey) &&
       (p.name || '').toLowerCase().includes(q) ||
       (p.display_name || '').toLowerCase().includes(q) ||
       (p.nip05 || '').toLowerCase().includes(q)
@@ -209,7 +213,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
   const mergedProfiles: UserProfile[] = [];
   const seen = new Set<string>();
   for (const p of [...localProfiles, ...networkProfiles]) {
-    if (!p?.pubkey || seen.has(p.pubkey)) continue;
+    if (!p?.pubkey || isSpamPubkey(p.pubkey) || seen.has(p.pubkey)) continue;
     seen.add(p.pubkey);
     mergedProfiles.push(p);
   }
@@ -217,10 +221,11 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
 
   // Postagens que batem com o termo (conteúdo ou autor)
   const matchingPosts = posts.filter(p =>
-    p.content.toLowerCase().includes(q) ||
+    !isSpamPubkey(p.pubkey) &&
+    (p.content.toLowerCase().includes(q) ||
     (p.author?.name || '').toLowerCase().includes(q) ||
     (p.author?.display_name || '').toLowerCase().includes(q)
-  ).slice(0, 20);
+    )).slice(0, 20);
 
   const selectedProfile = selectedProfilePubkey ? getProfile(selectedProfilePubkey) : null;
   // Publicações: as buscadas dos relays (quando carregadas) + as que já estavam no feed
@@ -246,7 +251,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
   };
 
   const handleCopyNpub = (pubkey: string, npub: string) => {
-    navigator.clipboard.writeText(npub);
+    copyToClipboard(npub);
     setCopiedKey(pubkey);
     setTimeout(() => setCopiedKey(null), 2000);
   };
@@ -256,12 +261,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
       <div className="space-y-4">
         {/* Cabeçalho do Perfil Buscado */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-          <div className="p-5 flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-700">
+          <div className="p-5 flex flex-col sm:flex-row items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-700">
             <div className="flex items-center gap-3 min-w-0">
               <img
                 src={selectedProfile.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80'}
                 alt={selectedProfile.name}
-                className="w-16 h-16 rounded-full object-cover shrink-0"
+                className="w-16 h-16 aspect-square rounded-full object-cover shrink-0"
               />
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -276,12 +281,14 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">{selectedProfile.npub}</p>
                 {selectedProfile.about && (
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed break-words">{linkifyText(selectedProfile.about)}</p>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed break-words whitespace-pre-line mb-2">
+                    {linkifyText(selectedProfile.about.replace(/(https?:\/\/)/gi, '\n$1'))}
+                  </div>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleSendMessage(selectedProfile.pubkey)}
                 className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors inline-flex items-center gap-1.5"
@@ -380,7 +387,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ query, onClose }) 
                   <img
                     src={profile.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                     alt={profile.name}
-                    className="w-10 h-10 rounded-full object-cover shrink-0"
+                    className="w-10 h-10 aspect-square rounded-full object-cover shrink-0"
                   />
                   <div className="min-w-0 flex-1">
                     <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">{profile.display_name || profile.name}</h4>

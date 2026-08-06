@@ -38,7 +38,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({ onOpenNewPost, onOpenR
         <img
           src={auth.profile?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
           alt="Avatar"
-          className="w-12 h-12 rounded-full object-cover border-2 border-blue-500/20 group-hover:border-blue-500 transition-colors"
+          className="w-12 h-12 aspect-square rounded-full object-cover border-2 border-blue-500/20 group-hover:border-blue-500 transition-colors"
         />
         <div className="flex-1 min-w-0">
           <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">

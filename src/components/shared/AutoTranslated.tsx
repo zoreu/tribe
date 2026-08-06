@@ -83,7 +83,7 @@ export const AutoTranslated: React.FC<AutoTranslatedProps> = ({ text, variant = 
   const visible = showOriginal ? text : translated;
 
   return (
-    <span className={className}>
+    <div className={className}>
       {linkifyText(visible, variant as 'default' | 'onBlue')}
       {isTranslated && (
         <span
@@ -103,6 +103,6 @@ export const AutoTranslated: React.FC<AutoTranslatedProps> = ({ text, variant = 
           {FOOTER_TO[uiLang] || FOOTER_TO.en} {langName(targetBase, uiLang)}
         </span>
       )}
-    </span>
+    </div>
   );
 };

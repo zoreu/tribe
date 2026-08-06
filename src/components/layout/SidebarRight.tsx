@@ -77,7 +77,7 @@ export const SidebarRight: React.FC<SidebarRightProps> = ({ onOpenRelaysModal })
                   <img
                     src={profile.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
                     alt={profile.name}
-                    className="w-9 h-9 rounded-full object-cover shrink-0"
+                    className="w-9 h-9 aspect-square rounded-full object-cover shrink-0"
                   />
                   <div className="min-w-0">
                     <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate">{profile.display_name || profile.name}</h4>
